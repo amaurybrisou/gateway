@@ -1,0 +1,38 @@
+version: '3'
+services:
+  postgres:
+    image: postgres:9
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      - POSTGRES_USER=gateway
+      - POSTGRES_PASSWORD=gateway
+      - POSTGRES_DB=gateway
+    volumes:
+      - $PWD/.data/pgdata:/var/lib/postgresql/data
+
+  # adminer:
+  #   image: adminer
+  #   ports:
+  #     - "127.0.0.1:8080:8080"
+
+  pgadmin:
+    image: dpage/pgadmin4
+    ports:
+      - "127.0.0.1:54321:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=gateway
+      - PGADMIN_DEFAULT_PASSWORD=gateway
+    user: "0"
+    volumes:
+      - $PWD/.data/pgadmin:/var/lib/pgadmin
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - $PWD/.data/grafana:/var/lib/grafana

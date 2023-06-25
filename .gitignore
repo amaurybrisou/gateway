@@ -1,0 +1,7 @@
+build/**/dist/*
+.history
+.vscode
+.bin
+.data
+.env
+**secret**
