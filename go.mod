@@ -14,6 +14,7 @@ require (
 	github.com/markbates/goth v1.77.0
 	github.com/prometheus/client_golang v1.16.0
 	github.com/rs/zerolog v1.29.1
+	github.com/stripe/stripe-go/v72 v72.122.0
 	go.mongodb.org/mongo-driver v1.7.5
 )
 

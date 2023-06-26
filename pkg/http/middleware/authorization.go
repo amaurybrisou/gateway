@@ -70,7 +70,7 @@ func (s AuthMiddlewareService) BearerAuth(next http.Handler, getUser func(contex
 		user, err := getUser(r.Context(), token)
 		if err != nil {
 			log.Ctx(r.Context()).Error().Err(err).Msg("user not found")
-			http.Error(w, "user not found", http.StatusUnauthorized)
+			next.ServeHTTP(w, r)
 			return
 		}
 

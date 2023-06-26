@@ -4,17 +4,17 @@ import (
 	"github.com/amaurybrisou/gateway/internal/db"
 	"github.com/amaurybrisou/gateway/internal/services/gwservice"
 	"github.com/amaurybrisou/gateway/internal/services/oauth"
+	"github.com/amaurybrisou/gateway/internal/services/payment"
 	"github.com/amaurybrisou/gateway/internal/services/proxy"
 	"github.com/amaurybrisou/gateway/internal/services/public"
-	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
 )
 
 type Services struct {
-	oauth          oauth.Service
-	public         public.Service
-	svc            gwservice.Service
-	proxy          proxy.Proxy
-	authMiddleware coremiddleware.AuthMiddlewareService
+	oauth   oauth.Service
+	public  public.Service
+	svc     gwservice.Service
+	proxy   proxy.Proxy
+	payment payment.Service
 }
 
 func (s Services) Oauth() oauth.Service {
@@ -33,15 +33,20 @@ func (s Services) Proxy() proxy.Proxy {
 	return s.proxy
 }
 
-// func (s Services) AuthMiddleware() coremiddleware.Service {
-// 	return s.authMiddleware
-// }
+func (s Services) Payment() payment.Service {
+	return s.payment
+}
 
-func NewServices(db *db.Database) Services {
+type ServiceConfig struct {
+	StripeKey, StripeSuccessURL, StripeCancelURL string
+}
+
+func NewServices(db *db.Database, cfg ServiceConfig) Services {
 	return Services{
-		oauth:  oauth.New(db),
-		public: public.New(db),
-		svc:    gwservice.New(db),
-		proxy:  proxy.New(db),
+		oauth:   oauth.New(db),
+		public:  public.New(db),
+		svc:     gwservice.New(db),
+		proxy:   proxy.New(db),
+		payment: *payment.NewService(db, cfg.StripeKey, cfg.StripeSuccessURL, cfg.StripeCancelURL),
 	}
 }

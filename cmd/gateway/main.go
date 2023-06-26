@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/amaurybrisou/gateway/internal/db"
 	"github.com/amaurybrisou/gateway/internal/db/models"
@@ -22,7 +23,6 @@ func main() {
 	// cfg := config.New()
 
 	ctx := log.Logger.WithContext(context.Background())
-
 	dbUrl := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
 		core.LookupEnv("DB_USERNAME", "gateway"),
 		core.LookupEnv("DB_PASSWORD", "gateway"),
@@ -47,7 +47,11 @@ func main() {
 
 	db := db.New(postgres)
 
-	services := services.NewServices(db)
+	services := services.NewServices(db, services.ServiceConfig{
+		StripeKey:        os.Getenv("STRIPE_KEY"),
+		StripeSuccessURL: "http://localhost:8089/payment/success",
+		StripeCancelURL:  "http://localhost:8089/payment/cancel",
+	})
 
 	r := router(services, db)
 
@@ -85,6 +89,8 @@ func router(s services.Services, db *db.Database) http.Handler {
 			"/auth/google",
 			"/auth/google/callback",
 			"/services",
+			"/payment/create",
+			"/payment/sucess",
 		},
 	)
 
@@ -95,10 +101,12 @@ func router(s services.Services, db *db.Database) http.Handler {
 	r.HandleFunc("/auth/{provider}", s.Oauth().AuthHandler)
 	r.HandleFunc("/auth/{provider}/callback", s.Oauth().CallBackHandler)
 	r.HandleFunc("/services", s.Service().GetAllServicesHandler).Methods(http.MethodGet)
+	r.HandleFunc("/payment/create", s.Payment().BuyServiceHandler).Methods(http.MethodPost)
+	r.HandleFunc("/payment/success", s.Payment().StripeSuccess)
 
 	// require authentication
 	r.HandleFunc("/logout/{provider}", s.Oauth().LogoutHandler)
-	
+
 	adminRouter := r.NewRoute().Subrouter()
 	adminRouter.Use(func(h http.Handler) http.Handler {
 		return authMiddleware.IsAdmin(h)

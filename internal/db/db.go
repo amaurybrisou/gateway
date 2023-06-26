@@ -57,6 +57,32 @@ func (d Database) DeleteService(ctx context.Context, serviceID uuid.UUID) (bool,
 	return rowsAffected == 1, nil
 }
 
+func (d *Database) GetServiceByID(ctx context.Context, serviceID uuid.UUID) (models.Service, error) {
+	query := `
+		SELECT id, name, prefix, required_roles, costs, created_at, updated_at, deleted_at
+		FROM "service"
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+
+	var service models.Service
+	err := d.db.QueryRow(ctx, query, serviceID).Scan(
+		&service.ID,
+		&service.Name,
+		&service.Prefix,
+		&service.RequiredRoles,
+		&service.Costs,
+		&service.CreatedAt,
+		&service.UpdatedAt,
+		&service.DeletedAt,
+	)
+	if err != nil {
+		// Handle the error (e.g., return an error response, log the error)
+		return models.Service{}, err
+	}
+
+	return service, nil
+}
+
 func (d Database) CreateUser(ctx context.Context, u models.User) (models.User, error) {
 	query := `
 		INSERT INTO "user" (id, email, avatar, firstname, lastname, role, stripe_key, created_at)
@@ -87,6 +113,33 @@ func (d Database) UpdateUser(ctx context.Context, u models.User) (models.User, e
 	}
 
 	return u, nil
+}
+
+func (d *Database) GetUserByID(ctx context.Context, userID uuid.UUID) (models.User, error) {
+	query := `
+		SELECT id, email, firstname, lastname, role, stripe_key, created_at, updated_at, deleted_at
+		FROM "user"
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+
+	var user models.User
+	err := d.db.QueryRow(ctx, query, userID).Scan(
+		&user.ID,
+		&user.Email,
+		&user.Firstname,
+		&user.Lastname,
+		&user.Role,
+		&user.StripeKey,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.DeletedAt,
+	)
+	if err != nil {
+		// Handle the error (e.g., return an error response, log the error)
+		return models.User{}, err
+	}
+
+	return user, nil
 }
 
 func (d Database) AddRole(ctx context.Context, userID uuid.UUID, role models.Role, duration time.Duration) (models.UserRole, error) {
@@ -138,19 +191,23 @@ func (d Database) GetRoles(ctx context.Context) ([]models.Role, error) {
 	return roles, nil
 }
 
-func (d Database) CreatePayment(ctx context.Context) (models.UserPayment, error) {
+func (d Database) CreatePayment(ctx context.Context, userID, serviceID uuid.UUID, duration time.Duration, amount float32) (models.UserPayment, error) {
 	query := `
-		INSERT INTO user_payment (id, service_id, created_at, status)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO user_payment (id, user_id, service_id, amount, duration, created_at, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING *`
 
 	payment := models.UserPayment{
 		ID:        uuid.New(),
+		UserID:    userID,
+		ServiceID: serviceID,
+		Amount:    amount,
+		Duration:  duration,
 		CreatedAt: time.Now(),
 	}
 
-	err := d.db.QueryRow(ctx, query, payment.ID, payment.ServiceID, payment.CreatedAt, payment.Status).Scan(
-		&payment.ID, &payment.ServiceID, &payment.CreatedAt, &payment.Status, &payment.UpdatedAt, &payment.DeletedAt)
+	err := d.db.QueryRow(ctx, query, payment.ID, payment.UserID, payment.ServiceID, payment.Amount, payment.Duration, payment.CreatedAt, payment.Status).Scan(
+		&payment.ID, &payment.UserID, &payment.ServiceID, &payment.CreatedAt, &payment.Status, &payment.UpdatedAt, &payment.DeletedAt)
 	if err != nil {
 		return models.UserPayment{}, fmt.Errorf("failed to create payment: %v", err)
 	}
@@ -407,4 +464,31 @@ func (d *Database) DeleteAccessToken(ctx context.Context, userID uuid.UUID) erro
 	}
 
 	return nil
+}
+
+func (d *Database) GetPaymentByID(ctx context.Context, paymentID uuid.UUID) (models.UserPayment, error) {
+	query := `
+		SELECT id, user_id, service_id, amount, duration, created_at, status, updated_at, deleted_at
+		FROM "user_payment"
+		WHERE id = $1
+	`
+
+	var payment models.UserPayment
+	err := d.db.QueryRow(ctx, query, paymentID).Scan(
+		&payment.ID,
+		&payment.UserID,
+		&payment.ServiceID,
+		&payment.Amount,
+		&payment.Duration,
+		&payment.CreatedAt,
+		&payment.Status,
+		&payment.UpdatedAt,
+		&payment.DeletedAt,
+	)
+	if err != nil {
+		// Handle the error (e.g., return an error response, log the error)
+		return models.UserPayment{}, err
+	}
+
+	return payment, nil
 }

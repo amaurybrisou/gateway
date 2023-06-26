@@ -49,7 +49,10 @@ CREATE TABLE "user_role" (
 -- Create the "user_payment" table
 CREATE TABLE "user_payment" (
     "id" UUID PRIMARY KEY,
+    "user_id" UUID REFERENCES "user"("id"),
     "service_id" UUID REFERENCES "service"("id"),
+    "amount" NUMERIC NOT NULL,
+    "duration" int NOT NULL,
     "created_at" TIMESTAMP DEFAULT NOW() NOT NULL,
     "status" TEXT NOT NULL,
     "updated_at" TIMESTAMP,

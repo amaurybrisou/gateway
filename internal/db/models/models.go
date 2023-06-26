@@ -133,7 +133,10 @@ const (
 
 type UserPayment struct {
 	ID        uuid.UUID     `json:"id"`
+	UserID    uuid.UUID     `json:"user_id"`
 	ServiceID uuid.UUID     `json:"service_id"`
+	Amount    float32       `json:"amount"`
+	Duration time.Duration `json:"duration"`
 	CreatedAt time.Time     `json:"created_at"`
 	Status    PaymentStatus `json:"status"`
 	UpdatedAt *time.Time    `json:"updated_at"`
