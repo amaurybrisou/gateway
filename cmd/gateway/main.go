@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
+	"time"
 
 	"github.com/amaurybrisou/gateway/internal/db"
 	"github.com/amaurybrisou/gateway/internal/db/models"
 	"github.com/amaurybrisou/gateway/internal/services"
+	"github.com/amaurybrisou/gateway/internal/services/oauth"
+	"github.com/amaurybrisou/gateway/internal/services/payment"
 	"github.com/amaurybrisou/gateway/pkg/core"
+	"github.com/amaurybrisou/gateway/pkg/core/jwtlib"
 	"github.com/amaurybrisou/gateway/pkg/core/store"
 	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
 	"github.com/gorilla/mux"
@@ -19,8 +22,6 @@ import (
 
 func main() {
 	core.Logger()
-
-	// cfg := config.New()
 
 	ctx := log.Logger.WithContext(context.Background())
 	dbUrl := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
@@ -47,10 +48,19 @@ func main() {
 
 	db := db.New(postgres)
 
+	// google.New(
 	services := services.NewServices(db, services.ServiceConfig{
-		StripeKey:        os.Getenv("STRIPE_KEY"),
-		StripeSuccessURL: "http://localhost:8089/payment/success",
-		StripeCancelURL:  "http://localhost:8089/payment/cancel",
+		PaymentConfig: payment.Config{
+			StripeKey:           core.LookupEnv("STRIPE_KEY", ""),
+			StripeSuccessURL:    core.LookupEnv("STRIPE_SUCCESS_URL", "http://localhost:8089/login"),
+			StripeCancelURL:     core.LookupEnv("STRIPE_CANCEL_URL", "http://localhost:8089"),
+			StripeWebHookSecret: core.LookupEnv("STRIPE_WEBHOOK_SECRET", ""),
+		},
+		GoogleConfig: oauth.Config{
+			GoogleKey:         core.LookupEnv("GOOGLE_KEY", ""),
+			GoogleSecret:      core.LookupEnv("GOOGLE_SECRET", ""),
+			GoogleCallBackURL: core.LookupEnv("GOOGLE_CALLBACK_URL", "http://localhost:8089/auth/google/callback"),
+		},
 	})
 
 	r := router(services, db)
@@ -86,28 +96,75 @@ func router(s services.Services, db *db.Database) http.Handler {
 		db,
 		[]string{
 			"/",
-			"/auth/google",
-			"/auth/google/callback",
+			// "/auth/{provider}",
+			// "/auth/{provider}/callback",
+			"/pricing/{service_name}",
 			"/services",
 			"/payment/create",
-			"/payment/sucess",
+			"/payment/webhook",
+			"/login",
 		},
 	)
 
-	r.Use(func(h http.Handler) http.Handler { return authMiddleware.BearerAuth(h, db.GetUserByAccessToken) })
-
-	// unauthenticated
+	l := jwtlib.New("secret")
+	// UNAUTHENTICATED
 	// r.HandleFunc("/", rootHandler(db))
-	r.HandleFunc("/auth/{provider}", s.Oauth().AuthHandler)
-	r.HandleFunc("/auth/{provider}/callback", s.Oauth().CallBackHandler)
+	r.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		type Credentials struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		// Parse the request body into a Credentials struct
+		var creds Credentials
+		err := json.NewDecoder(r.Body).Decode(&creds)
+		if err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		// Verify the credentials (example: hardcoded username and password)
+		if creds.Username != "admin" || creds.Password != "password" {
+			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+			return
+		}
+
+		// Generate a JWT token with a subject and expiration time
+		token, err := l.GenerateToken(creds.Username, time.Now().Add(time.Hour))
+		if err != nil {
+			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			return
+		}
+
+		// Return the token as the response
+		response := map[string]string{"token": token}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response) //nolint
+	})
+	// authenticatedRouter.HandleFunc("/payment/create", s.Payment().BuyServiceHandler).Methods(http.MethodPost)
+	// r.HandleFunc("/auth/{provider}", s.Oauth().AuthHandler)
+	// r.HandleFunc("/auth/{provider}/callback", s.Oauth().CallBackHandler)
+	r.HandleFunc("/payment/webhook", s.Payment().StripeWebhook)
 	r.HandleFunc("/services", s.Service().GetAllServicesHandler).Methods(http.MethodGet)
-	r.HandleFunc("/payment/create", s.Payment().BuyServiceHandler).Methods(http.MethodPost)
-	r.HandleFunc("/payment/success", s.Payment().StripeSuccess)
+	r.HandleFunc("/pricing/{service_name}", s.Service().ServicePricePage).Methods(http.MethodGet)
 
-	// require authentication
-	r.HandleFunc("/logout/{provider}", s.Oauth().LogoutHandler)
+	// AUTHENTICATED
+	authenticatedRouter := r.NewRoute().Subrouter()
 
-	adminRouter := r.NewRoute().Subrouter()
+	// authenticatedRouter.Use(func(h http.Handler) http.Handler {
+	// 	return authMiddleware.BearerAuth(http.RedirectHandler("/", http.StatusPermanentRedirect), db.GetUserByAccessToken)
+	// })
+
+	authenticatedRouter.Use(func(h http.Handler) http.Handler {
+		return coremiddleware.JWTAuth(h, "secret")
+	})
+
+	// authenticatedRouter.Use(func(h http.Handler) http.Handler {
+	// 	return authMiddleware.SessionAuth(h)
+	// })
+
+	// authenticatedRouter.HandleFunc("/logout/{provider}", s.Oauth().LogoutHandler)
+
+	adminRouter := authenticatedRouter.NewRoute().Subrouter()
 	adminRouter.Use(func(h http.Handler) http.Handler {
 		return authMiddleware.IsAdmin(h)
 	})
@@ -115,7 +172,9 @@ func router(s services.Services, db *db.Database) http.Handler {
 	adminRouter.HandleFunc("/services", s.Service().CreateServiceHandler).Methods(http.MethodPost)
 	adminRouter.HandleFunc("/services", s.Service().DeleteServiceHandler).Methods(http.MethodDelete)
 
-	r.PathPrefix("/").Handler(s.Proxy().ProxyHandler(rootHandler(db)))
+	adminRouter.HandleFunc("/plans", s.Service().CreatePlanHandler).Methods(http.MethodPost)
+
+	authenticatedRouter.PathPrefix("/").Handler(s.Proxy().ProxyHandler(rootHandler(db)))
 
 	return r
 }
@@ -129,27 +188,27 @@ func rootHandler(db *db.Database) http.HandlerFunc {
 			return
 		}
 
-		userInt := coremiddleware.User(r.Context())
-		if userInt == nil {
-			if err := json.NewEncoder(w).Encode(struct {
-				Services []models.Service `json:"services"`
-			}{
-				Services: servicesList,
-			}); err != nil {
-				log.Ctx(r.Context()).Err(err).Send()
-				http.Error(w, "error marshaling", http.StatusInternalServerError)
-				return
-			}
-			return
-		}
+		// userInt := coremiddleware.User(r.Context())
+		// if userInt == nil {
+		// 	if err := json.NewEncoder(w).Encode(struct {
+		// 		Services []models.Service `json:"services"`
+		// 	}{
+		// 		Services: servicesList,
+		// 	}); err != nil {
+		// 		log.Ctx(r.Context()).Err(err).Send()
+		// 		http.Error(w, "error marshaling", http.StatusInternalServerError)
+		// 		return
+		// 	}
+		// 	return
+		// }
 
-		user := models.NewUserFromInt(userInt)
+		// user := models.NewUserFromInt(userInt)
 
 		if err := json.NewEncoder(w).Encode(struct {
 			User     models.User      `json:"user"`
 			Services []models.Service `json:"services"`
 		}{
-			User:     user,
+			//User:     user,
 			Services: servicesList,
 		}); err != nil {
 			log.Ctx(r.Context()).Err(err).Send()

@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"text/template"
 
 	"github.com/amaurybrisou/gateway/internal/db"
 	"github.com/amaurybrisou/gateway/internal/db/models"
+	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
 )
 
@@ -92,6 +95,78 @@ func (s Service) GetAllServicesHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewEncoder(w).Encode(services); err != nil {
 		log.Ctx(r.Context()).Err(err).Send()
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s Service) CreatePlanHandler(w http.ResponseWriter, r *http.Request) {
+	var plan models.Plan
+	if err := json.NewDecoder(r.Body).Decode(&plan); err != nil {
+		log.Ctx(r.Context()).Err(err).Send()
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	plan.ID = uuid.New()
+
+	createdPlan, err := s.db.CreatePlan(r.Context(), plan.ServiceID, plan.Name, plan.Description, plan.Price, plan.Duration, plan.Currency)
+	if err != nil {
+		log.Ctx(r.Context()).Err(err).Send()
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(createdPlan); err != nil {
+		log.Ctx(r.Context()).Err(err).Send()
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s Service) ServicePricePage(w http.ResponseWriter, r *http.Request) {
+	serviceName := mux.Vars(r)["service_name"]
+
+	service, err := s.db.GetServiceByName(r.Context(), serviceName)
+	if err != nil {
+		log.Ctx(r.Context()).Err(err).Send()
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	tmpl := `
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<title>{{.service.Name}}</title>
+		</head>
+		<body>		
+			<script async src="https://js.stripe.com/v3/pricing-table.js"></script>
+			<stripe-pricing-table pricing-table-id="{{.service.PricingTableKey}}"
+				publishable-key="{{.service.PricingTablePublishableKey}}"
+				client-reference-id="{{.service.ID}}"				
+				>
+			</stripe-pricing-table>
+		</body>
+		</html>
+	`
+
+	// Create a template instance
+	t, err := template.New("services").Parse(tmpl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	user := coremiddleware.User(r.Context())
+
+	// Execute the template with the list of services
+	w.Header().Set("Content-Type", "text/html")
+	err = t.Execute(w, map[any]any{
+		"service": service,
+		"user":    user,
+	})
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

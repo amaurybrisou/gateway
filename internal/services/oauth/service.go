@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/amaurybrisou/gateway/internal/db"
 	"github.com/amaurybrisou/gateway/internal/db/models"
+	"github.com/amaurybrisou/gateway/pkg/core"
 	coremodels "github.com/amaurybrisou/gateway/pkg/core/models"
 	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
 	"github.com/google/uuid"
+	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/markbates/goth/providers/google"
@@ -23,10 +24,22 @@ type Service struct {
 	ProviderIndex providerIndex
 }
 
-func New(db *db.Database) Service {
+type Config struct {
+	GoogleKey         string
+	GoogleSecret      string
+	GoogleCallBackURL string
+}
+
+func New(db *db.Database, cfg Config) Service {
 	goth.UseProviders(
-		google.New(os.Getenv("GOOGLE_KEY"), os.Getenv("GOOGLE_SECRET"), "http://localhost:8089/auth/google/callback"),
+		google.New(cfg.GoogleKey, cfg.GoogleSecret, cfg.GoogleCallBackURL),
 	)
+
+	store := sessions.NewCookieStore([]byte(core.LookupEnv("SESSION_SECRET", "invalid")))
+	store.MaxAge(36000)
+	store.Options.Path = "/"
+	store.Options.HttpOnly = true
+	gothic.Store = store
 
 	pi := providerIndex{Providers: []string{"google"}, ProvidersMap: map[string]string{"google": "Google"}}
 
@@ -52,7 +65,7 @@ func (s Service) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gothic.Logout(w, r)
+	gothic.Logout(w, r) //nolint
 	w.Header().Set("Location", "/")
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
@@ -99,14 +112,15 @@ func (s Service) CallBackHandler(w http.ResponseWriter, r *http.Request) {
 func (s Service) AuthHandler(res http.ResponseWriter, req *http.Request) {
 	// try to get the user without re-authenticating
 	if gothUser, err := gothic.CompleteUserAuth(res, req); err == nil {
-		t, _ := template.New("foo").Parse(userTemplate)
-		t.Execute(res, gothUser)
+		t, _ := template.New("foo").Parse(indexTemplate)
+		t.Execute(res, gothUser) //nolint
 	} else {
 		gothic.BeginAuthHandler(res, req)
 	}
 }
 
 var indexTemplate = `
+<p><a href="/logout/{{.Provider}}">logout</a></p>
 <p><a href="/services">Add Service</a></p>
 <h1>List of Services</h1>
 	<ul>
@@ -119,17 +133,3 @@ var indexTemplate = `
 {{range $key,$value:=.Providers}}
     <p><a href="/auth/{{$value}}">Log in with {{index $.ProvidersMap $value}}</a></p>
 {{end}}`
-
-var userTemplate = `
-<p><a href="/logout/{{.Provider}}">logout</a></p>
-<p>Name: {{.Name}} [{{.LastName}}, {{.FirstName}}]</p>
-<p>Email: {{.Email}}</p>
-<p>NickName: {{.NickName}}</p>
-<p>Location: {{.Location}}</p>
-<p>AvatarURL: {{.AvatarURL}} <img src="{{.AvatarURL}}"></p>
-<p>Description: {{.Description}}</p>
-<p>UserID: {{.UserID}}</p>
-<p>AccessToken: {{.AccessToken}}</p>
-<p>ExpiresAt: {{.ExpiresAt}}</p>
-<p>RefreshToken: {{.RefreshToken}}</p>
-`

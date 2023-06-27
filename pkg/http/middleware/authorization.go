@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"github.com/amaurybrisou/gateway/internal/db"
+	"github.com/amaurybrisou/gateway/pkg/core/jwtlib"
 	coremodels "github.com/amaurybrisou/gateway/pkg/core/models"
 	"github.com/google/uuid"
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/gothic"
 	"github.com/rs/zerolog/log"
 )
 
@@ -34,15 +37,22 @@ func (s AuthMiddlewareService) IsAdmin(next http.Handler) http.HandlerFunc {
 	}
 }
 
+func (s AuthMiddlewareService) SessionAuth(next http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		session, _ := gothic.Store.Get(r, "user")
+		user := session.Values["user"].(goth.User)
+		if user.UserID == "" {
+			w.Header().Set("Location", "/")
+			w.WriteHeader(http.StatusTemporaryRedirect)
+			return
+		}
+		next.ServeHTTP(w, r)
+	}
+}
+
 func (s AuthMiddlewareService) BearerAuth(next http.Handler, getUser func(context.Context, string) (coremodels.UserInterface, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		isWhitelisted := false
-		for _, path := range s.whitelist {
-			if r.URL.Path == path {
-				isWhitelisted = true
-				break
-			}
-		}
+		isWhitelisted := validatePath(r.URL.Path, s.whitelist)
 
 		// Get the Authorization header value
 		authHeader := r.Header.Get("Authorization")
@@ -79,6 +89,62 @@ func (s AuthMiddlewareService) BearerAuth(next http.Handler, getUser func(contex
 
 		next.ServeHTTP(w, r)
 	}
+}
+
+func validatePath(path string, whitelist []string) bool {
+	for _, allowedPath := range whitelist {
+		if pathMatch(allowedPath, path) {
+			return true
+		}
+	}
+	return false
+}
+
+func pathMatch(allowedPath, path string) bool {
+	allowedParts := strings.Split(allowedPath, "/")
+	pathParts := strings.Split(path, "/")
+
+	if len(allowedParts) != len(pathParts) {
+		return false
+	}
+
+	for i, part := range allowedParts {
+		if part != pathParts[i] && !strings.HasPrefix(part, "{") && !strings.HasSuffix(part, "}") {
+			return false
+		}
+	}
+
+	return true
+}
+
+func JWTAuth(next http.Handler, secretKey string) http.Handler {
+	jwt := jwtlib.New(secretKey)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Get the Authorization header value
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Extract the token from the Authorization header
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// Verify the token
+		claims, err := jwt.VerifyToken(token)
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Add the claims to the request context
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, UserIDCtxKey, claims["sub"])
+		r = r.WithContext(ctx)
+
+		// Call the next handler
+		next.ServeHTTP(w, r)
+	})
 }
 
 func createUserContext(ctx context.Context, user coremodels.UserInterface) context.Context {

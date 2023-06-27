@@ -38,15 +38,16 @@ func (s Services) Payment() payment.Service {
 }
 
 type ServiceConfig struct {
-	StripeKey, StripeSuccessURL, StripeCancelURL string
+	PaymentConfig payment.Config
+	GoogleConfig  oauth.Config
 }
 
 func NewServices(db *db.Database, cfg ServiceConfig) Services {
 	return Services{
-		oauth:   oauth.New(db),
+		oauth:   oauth.New(db, cfg.GoogleConfig),
 		public:  public.New(db),
 		svc:     gwservice.New(db),
 		proxy:   proxy.New(db),
-		payment: *payment.NewService(db, cfg.StripeKey, cfg.StripeSuccessURL, cfg.StripeCancelURL),
+		payment: *payment.NewService(db, cfg.PaymentConfig),
 	}
 }

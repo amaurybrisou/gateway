@@ -55,7 +55,14 @@ func (s Proxy) ProxyHandler(next http.HandlerFunc) http.HandlerFunc {
 					}
 				}
 
-				userID := r.Context().Value(coremiddleware.UserIDCtxKey).(uuid.UUID)
+				userIDString := r.Context().Value(coremiddleware.UserIDCtxKey).(string)
+				userID, err := uuid.Parse(userIDString)
+				if err != nil {
+					log.Ctx(r.Context()).Err(err).Msg("parse user_id")
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					return
+				}
+
 				hasRole, err := s.db.HasRole(r.Context(), userID, service.RequiredRoles...)
 				if err != nil {
 					log.Ctx(r.Context()).Err(err).Msg("determine user roles")

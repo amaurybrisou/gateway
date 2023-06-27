@@ -19,16 +19,18 @@ type UserRole struct {
 type Role string
 
 type Service struct {
-	ID            uuid.UUID               `json:"id"`
-	Name          string                  `json:"name"`
-	Prefix        string                  `json:"prefix"`
-	Domain        string                  `json:"domain"`
-	Host          string                  `json:"host"`
-	RequiredRoles []Role                  `json:"required_roles"`
-	Costs         map[SubDuration]float32 `json:"costs"`
-	CreatedAt     time.Time               `json:"created_at"`
-	UpdatedAt     *time.Time              `json:"updated_at"`
-	DeletedAt     *time.Time              `json:"deleted_at"`
+	ID                         uuid.UUID `json:"id"`
+	Name                       string    `json:"name"`
+	Prefix                     string    `json:"prefix"`
+	Domain                     string    `json:"domain"`
+	Host                       string    `json:"host"`
+	PricingTableKey            string    `json:"pricing_table_key"`
+	PricingTablePublishableKey string    `json:"pricing_table_publishable_key"`
+
+	RequiredRoles []Role     `json:"required_roles"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     *time.Time `json:"updated_at"`
+	DeletedAt     *time.Time `json:"deleted_at"`
 }
 
 func (s Service) HasRole(r Role) bool {
@@ -38,6 +40,17 @@ func (s Service) HasRole(r Role) bool {
 		}
 	}
 	return false
+}
+
+type Plan struct {
+	ID          uuid.UUID   `json:"id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Price       float64     `json:"price"`
+	Currency    string      `json:"currency"`
+	Duration    SubDuration `json:"duration"`
+	ServiceID   uuid.UUID   `json:"service_id"`
+	Service     Service     `json:"service"`
 }
 
 type SubDuration time.Duration
@@ -134,9 +147,8 @@ const (
 type UserPayment struct {
 	ID        uuid.UUID     `json:"id"`
 	UserID    uuid.UUID     `json:"user_id"`
-	ServiceID uuid.UUID     `json:"service_id"`
-	Amount    float32       `json:"amount"`
-	Duration time.Duration `json:"duration"`
+	PlanID    uuid.UUID     `json:"plan_id"`
+	Plan      Plan          `json:"plan"`
 	CreatedAt time.Time     `json:"created_at"`
 	Status    PaymentStatus `json:"status"`
 	UpdatedAt *time.Time    `json:"updated_at"`
