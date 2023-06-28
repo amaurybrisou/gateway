@@ -7,19 +7,19 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/amaurybrisou/gateway/internal/db"
-	"github.com/amaurybrisou/gateway/internal/db/models"
 	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
+	"github.com/amaurybrisou/gateway/src/database"
+	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
 type Proxy struct {
-	db          *db.Database
+	db          *database.Database
 	servicesMap map[string]*models.Service
 }
 
-func New(db *db.Database) Proxy {
+func New(db *database.Database) Proxy {
 	services, err := db.GetServices(context.Background())
 	if err != nil {
 		panic(err)
@@ -55,7 +55,13 @@ func (s Proxy) ProxyHandler(next http.HandlerFunc) http.HandlerFunc {
 					}
 				}
 
-				userID := r.Context().Value(coremiddleware.UserIDCtxKey).(uuid.UUID)
+				userID, ok := r.Context().Value(coremiddleware.UserIDCtxKey).(uuid.UUID)
+				if !ok {
+					// log.Ctx(r.Context()).Err(errors.New("invalid user_id")).Send()
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					return
+				}
+
 				hasRole, err := s.db.HasRole(r.Context(), userID, service.RequiredRoles...)
 				if err != nil {
 					log.Ctx(r.Context()).Err(err).Msg("determine user roles")
@@ -99,17 +105,16 @@ func (s Proxy) ProxyHandler(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		proxy.ServeHTTP(w, r)
-
 	}
 }
 
-// Helper function to extract the path prefix from a URL
+// Helper function to extract the path prefix from a URL.
 func extractPathPrefix(path string) string {
 	path = strings.Split(path, "/")[1] // Assuming the path has a leading slash
 	return "/" + strings.Split(path, "/")[0]
 }
 
-// Helper function to join URL paths with a single slash
+// Helper function to join URL paths with a single slash.
 func singleJoiningSlash(a, b string) string {
 	aslash := strings.HasSuffix(a, "/")
 	bslash := strings.HasPrefix(b, "/")

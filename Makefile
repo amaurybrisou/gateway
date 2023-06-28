@@ -1,5 +1,6 @@
 # Define the path where go-migrate will be installed
-GOBIN := $(shell pwd)/.bin
+ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+GOBIN := ${ROOT_DIR}/.bin
 
 # Define the name of the migration tool binary
 MIGRATE_BINARY := migrate
@@ -11,19 +12,73 @@ POSTGRES_PASSWORD=gateway
 POSTGRES_USER=gateway
 POSTGRES_PORT=5432
 
-.data:
-	mkdir -p $@
+.PHONY: lint
+lint:
+	@echo "> Lint backend..."
+	golangci-lint run ./...
 
-.PHONY: start
-start: .data
-	docker-compose up --remove-orphans 
+.PHONY: test
+test:
+	@echo "> Test backend..."
+	@go test -count=1 -timeout 3m -v ./...
+
+.PHONY: config
+config:
+	cp .env.default .env
+
+
+.PHONY: build
+build:
+	@echo "> Build backend..."
+	go build -ldflags=" \
+		-X 'github.com/brisouamaury/gateway/cmd/gateway/main.buildVersion=$(shell git describe --abbrev=0 --tags)' \
+		-X 'github.com/brisouamaury/gateway/cmd/gateway/main.buildHash=$(shell git describe --always --long --dirty)' \
+		-X 'github.com/brisouamaury/gateway/cmd/gateway/main.buildTime=$(shell date)'" \
+		cmd/gateway/main.go
 
 .PHONY: up
-up: $(GOBIN)/migrate
+up:  .data/adminer-save
+	@echo '+==============================================================================+'
+	@echo '+ This command starts a local backend with all the required dependencies.      +'
+	@echo '+                                                                              +'
+	@echo '+                                 [ Endpoints ]                                +'
+	@echo '+                                                                              +'
+	@echo '+   http://0.0.0.0:8080     (the backend itself)                               +'
+	@echo '+   http://localhost:5432   (the postgres database)                            +'
+	@echo '+   http://localhost:54321  (the adminer interface)                            +'
+	@echo '+                                                                              +'
+	@echo '+==============================================================================+'
+	@echo
+	docker compose up --remove-orphans --build
+
+.PHONY: up-stack
+up-stack:
+	@echo '+==============================================================================+'
+	@echo '+ This command starts a local stack that you can use to work on the backend.   +'
+	@echo '+                                                                              +'
+	@echo '+                                [ Endpoints ]                                 +'
+	@echo '+                                                                              +'
+	@echo '+   http://localhost:5432   (the postgres database)                            +'
+	@echo '+   http://localhost:54321  (the adminer interface)                            +'
+	@echo '+                                                                              +'
+	@echo '+==============================================================================+'
+	@echo
+	docker compose up --remove-orphans --build postgres adminer
+
+.PHONY: down
+down:
+	docker compose down --remove-orphans
+
+.PHONY: clean
+clean: down
+	rm -rf .bin .data
+
+.PHONY: up
+m-up: $(GOBIN)/migrate
 	$(GOBIN)/$(MIGRATE_BINARY) -source file://$(MIGRATE_DIR) -database postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable up
 
 .PHONY: down
-down: $(GOBIN)/migrate
+m-down: $(GOBIN)/migrate
 	$(GOBIN)/$(MIGRATE_BINARY) -path $(shell PWD)./migrations -database postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable down
 
 .PHONY: create-migration

@@ -5,24 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
-	"github.com/amaurybrisou/gateway/internal/db"
-	"github.com/amaurybrisou/gateway/internal/db/models"
-	"github.com/amaurybrisou/gateway/internal/services"
 	"github.com/amaurybrisou/gateway/pkg/core"
+	"github.com/amaurybrisou/gateway/pkg/core/jwtlib"
 	"github.com/amaurybrisou/gateway/pkg/core/store"
 	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
+	"github.com/amaurybrisou/gateway/src/database"
+	"github.com/amaurybrisou/gateway/src/database/models"
+	"github.com/amaurybrisou/gateway/src/gwservices"
+	"github.com/amaurybrisou/gateway/src/gwservices/payment"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
+)
+
+var (
+	BuildVersion, BuildHash, BuildTime string = "1.0", "localhost", time.Now().String()
 )
 
 func main() {
 	core.Logger()
 
-	// cfg := config.New()
-
 	ctx := log.Logger.WithContext(context.Background())
-
 	dbUrl := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
 		core.LookupEnv("DB_USERNAME", "gateway"),
 		core.LookupEnv("DB_PASSWORD", "gateway"),
@@ -45,9 +49,24 @@ func main() {
 		log.Ctx(ctx).Fatal().Err(err).Send()
 	}
 
-	db := db.New(postgres)
+	db := database.New(postgres)
 
-	services := services.NewServices(db)
+	domain := core.LookupEnv("DOMAIN", "http://localhost:8089")
+
+	// google.New(
+	services := gwservices.NewServices(db, gwservices.ServiceConfig{
+		PaymentConfig: payment.Config{
+			StripeKey:           core.LookupEnv("STRIPE_KEY", ""),
+			StripeSuccessURL:    core.LookupEnv("STRIPE_SUCCESS_URL", "http://localhost:8089/login"),
+			StripeCancelURL:     core.LookupEnv("STRIPE_CANCEL_URL", "http://localhost:8089"),
+			StripeWebHookSecret: core.LookupEnv("STRIPE_WEBHOOK_SECRET", ""),
+		},
+		JwtConfig: jwtlib.Config{
+			SecretKey: core.LookupEnv("JWT_KEY", "insecure-key"),
+			Issuer:    core.LookupEnv("JWT_ISSUER", domain),
+			Audience:  core.LookupEnv("JWT_AUDIENCE", "insecure-key"),
+		},
+	})
 
 	r := router(services, db)
 
@@ -70,36 +89,27 @@ func main() {
 	}
 }
 
-func router(s services.Services, db *db.Database) http.Handler {
-
+func router(s gwservices.Services, db *database.Database) http.Handler {
 	r := mux.NewRouter()
 
 	r.Use(coremiddleware.RequestMetric("gateway"))
 	r.Use(coremiddleware.Logger(log.Logger))
 	r.Use(coremiddleware.JsonContentType())
 
-	authMiddleware := coremiddleware.NewAuthMiddleware(
-		db,
-		[]string{
-			"/",
-			"/auth/google",
-			"/auth/google/callback",
-			"/services",
-		},
-	)
+	authMiddleware := coremiddleware.NewAuthMiddleware(db, s.Jwt())
 
-	r.Use(func(h http.Handler) http.Handler { return authMiddleware.BearerAuth(h, db.GetUserByAccessToken) })
-
-	// unauthenticated
+	// UNAUTHENTICATED
 	// r.HandleFunc("/", rootHandler(db))
-	r.HandleFunc("/auth/{provider}", s.Oauth().AuthHandler)
-	r.HandleFunc("/auth/{provider}/callback", s.Oauth().CallBackHandler)
+	r.HandleFunc("/login", s.Service().LoginHandler)
+	r.HandleFunc("/payment/webhook", s.Payment().StripeWebhook)
 	r.HandleFunc("/services", s.Service().GetAllServicesHandler).Methods(http.MethodGet)
+	r.HandleFunc("/pricing/{service_name}", s.Service().ServicePricePage).Methods(http.MethodGet)
 
-	// require authentication
-	r.HandleFunc("/logout/{provider}", s.Oauth().LogoutHandler)
-	
-	adminRouter := r.NewRoute().Subrouter()
+	// AUTHENTICATED
+	authenticatedRouter := r.NewRoute().Subrouter()
+	authenticatedRouter.Use(authMiddleware.JWTAuth)
+
+	adminRouter := authenticatedRouter.NewRoute().Subrouter()
 	adminRouter.Use(func(h http.Handler) http.Handler {
 		return authMiddleware.IsAdmin(h)
 	})
@@ -107,12 +117,12 @@ func router(s services.Services, db *db.Database) http.Handler {
 	adminRouter.HandleFunc("/services", s.Service().CreateServiceHandler).Methods(http.MethodPost)
 	adminRouter.HandleFunc("/services", s.Service().DeleteServiceHandler).Methods(http.MethodDelete)
 
-	r.PathPrefix("/").Handler(s.Proxy().ProxyHandler(rootHandler(db)))
+	authenticatedRouter.PathPrefix("/").Handler(s.Proxy().ProxyHandler(rootHandler(db)))
 
 	return r
 }
 
-func rootHandler(db *db.Database) http.HandlerFunc {
+func rootHandler(db *database.Database) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		servicesList, err := db.GetServices(r.Context())
 		if err != nil {

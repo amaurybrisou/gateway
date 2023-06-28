@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  pull_request:
+    paths-ignore: ["**/*.md", "docs/**"]
+    branches: ["main", "dev"]
+  push:
+    paths-ignore: ["**/*.md", "docs/**"]
+    branches: ["main", "dev"]
+
+env:
+  # https://go.dev/doc/devel/release
+  GO_VERSION: "1.20.5"
+  # https://github.com/golangci/golangci-lint/releases
+  GOLANGCI_LINT_VERSION: "v1.52.2"
+
+jobs:
+  tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version: "${{ env.GO_VERSION }}"
+      - run: go mod tidy
+      - name: Check for dirty files
+        run: git diff --exit-code
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version: "${{ env.GO_VERSION }}"
+      - uses: golangci/golangci-lint-action@v3
+        with:
+          version: "${{ env.GOLANGCI_LINT_VERSION }}"
+          # tar errors extracting to pkg dir
+          # example: https://github.com/knative-sandbox/kn-plugin-func/pull/490/checks?check_run_id=3551662472
+          # issue:   https://github.com/golangci/golangci-lint-action/issues/244
+          # hotfix is to skip the pkg cache, which also requires an extended timeout:
+          skip-pkg-cache: true
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version: "${{ env.GO_VERSION }}"
+      - run: make build
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version: "${{ env.GO_VERSION }}"
+      - run: make test
