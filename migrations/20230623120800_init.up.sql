@@ -13,7 +13,7 @@ CREATE TABLE "user" (
     "role" TEXT NOT NULL DEFAULT 'USER',
     "stripe_key" TEXT,
     "created_at" TIMESTAMP DEFAULT NOW() NOT NULL,
-    "updated_at" TIMESTAMP,
+    "updated_at" TIMESTAMP DEFAULT NOW(),
     "deleted_at" TIMESTAMP
 );
 
@@ -24,33 +24,23 @@ CREATE TABLE "service" (
     "domain" TEXT UNIQUE,
     "prefix" TEXT NOT NULL UNIQUE,
     "host" TEXT NOT NULL,
+    "image_url" TEXT,
     "required_roles" JSONB NOT NULL,
     "pricing_table_key" TEXT NOT NULL,
     "pricing_table_publishable_key" TEXT NOT NULL,
     "created_at" TIMESTAMP DEFAULT NOW() NOT NULL,
-    "updated_at" TIMESTAMP,
+    "updated_at" TIMESTAMP DEFAULT NOW(),
     "deleted_at" TIMESTAMP
 );
 
-
-
--- Create the "user_payment" table
-CREATE TABLE "user_payment" (
-    "id" UUID PRIMARY KEY,
-    "user_id" UUID REFERENCES "user"("id"),
-    "plan_id" UUID REFERENCES "plan"("id"),
-    "created_at" TIMESTAMP DEFAULT NOW() NOT NULL,
-    "status" TEXT NOT NULL,
-    "updated_at" TIMESTAMP,
-    "deleted_at" TIMESTAMP
-);
-
--- Create the "user_role" table
 CREATE TABLE "user_role" (
-    "user_id" UUID REFERENCES "user"("id"),
+    "user_id" UUID,
+    "subscription_id" TEXT NOT NULL,
     "role" TEXT NOT NULL,
-    "expiration_time" TIMESTAMP NOT NULL,
+    "expires_at" TIMESTAMP,
     "created_at" TIMESTAMP DEFAULT NOW() NOT NULL,
-    "updated_at" TIMESTAMP,
-    "deleted_at" TIMESTAMP
+    "updated_at" TIMESTAMP DEFAULT NOW(),
+    "deleted_at" TIMESTAMP,
+    PRIMARY KEY ("user_id", "role"),
+    FOREIGN KEY ("user_id") REFERENCES "user"("id")
 );

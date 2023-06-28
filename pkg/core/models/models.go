@@ -15,6 +15,7 @@ const (
 
 type UserInterface interface {
 	GetID() uuid.UUID
+	GetExternalID() string
 	GetEmail() string
 	GetAvatarURL() string
 	GetFirstname() string
@@ -27,20 +28,25 @@ type UserInterface interface {
 }
 
 type User struct {
-	ID        uuid.UUID
-	Email     string
-	AvatarURL string
-	Firstname string
-	Lastname  string
-	Role      GatewayRole
-	StripeKey *string
-	CreatedAt time.Time
-	UpdatedAt *time.Time
-	DeletedAt *time.Time
+	ID         uuid.UUID
+	ExternalID string
+	Email      string
+	AvatarURL  string
+	Firstname  string
+	Lastname   string
+	Role       GatewayRole
+	StripeKey  *string
+	CreatedAt  time.Time
+	UpdatedAt  *time.Time
+	DeletedAt  *time.Time
 }
 
 func (u User) GetID() uuid.UUID {
 	return u.ID
+}
+
+func (u User) GetExternalID() string {
+	return u.ExternalID
 }
 
 func (u User) GetEmail() string {

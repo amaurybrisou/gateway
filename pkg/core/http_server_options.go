@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -48,8 +49,9 @@ func WithServerTLSConfig(ctx context.Context, t *tls.Config) HttpOptions {
 func WithHTTPServer(addr string, port int, r http.Handler, opts ...HttpOptions) Options {
 	srv := &httpServerOption{
 		srv: http.Server{
-			Addr:    fmt.Sprintf("%s:%d", addr, port),
-			Handler: r,
+			Addr:              fmt.Sprintf("%s:%d", addr, port),
+			Handler:           r,
+			ReadHeaderTimeout: time.Second * 30,
 		},
 	}
 

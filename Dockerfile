@@ -14,9 +14,9 @@ RUN export "GOOS=$(echo "$TARGETPLATFORM" | cut -d/ -f1)"; \
     export CGO_ENABLED=0; \
     go build \
     -ldflags "-s -w \
-    #   -X 'github.com/time-app/backend/pkg/configs.BuildVersion=$BUILD_VERSION' \
-    #   -X 'github.com/time-app/backend/pkg/configs.BuildHash=$BUILD_HASH' \
-    #   -X 'github.com/time-app/backend/pkg/configs.BuildTime=$BUILD_TIME' \
+    #   -X 'github.com/brisouamaury/gateway/cmd/gateway/main.BuildVersion=$BUILD_VERSION' \
+    #   -X 'github.com/brisouamaury/gateway/cmd/gateway/main.BuildHash=$BUILD_HASH' \
+    #   -X 'github.com/brisouamaury/gateway/cmd/gateway/main.BuildTime=$BUILD_TIME' \
     " \
     -o ./backend .
 

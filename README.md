@@ -36,8 +36,10 @@ Contributions to the Gateway Application are welcome! If you find any bugs, have
 
 The Gateway Application is released under the [MIT License](LICENSE).
 
-## Stripe
+## Stripe: <https://stripe.com/docs/api/events/types>
 
 Payment succeeds                    4242 4242 4242 4242
 Payment requires authentication     4000 0025 0000 3155
 Payment is declined                 4000 0000 0000 9995
+
+## Create a service

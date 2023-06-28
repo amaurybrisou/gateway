@@ -12,10 +12,29 @@ POSTGRES_PASSWORD=gateway
 POSTGRES_USER=gateway
 POSTGRES_PORT=5432
 
+.PHONY: lint
+lint:
+	@echo "> Lint backend..."
+	golangci-lint run ./...
+
+.PHONY: test
+test:
+	@echo "> Test backend..."
+	@go test -count=1 -timeout 3m -v ./...
 
 .PHONY: config
 config:
 	cp .env.default .env
+
+
+.PHONY: build
+build:
+	@echo "> Build backend..."
+	go build -ldflags=" \
+		-X 'github.com/brisouamaury/gateway/cmd/gateway/main.buildVersion=$(shell git describe --abbrev=0 --tags)' \
+		-X 'github.com/brisouamaury/gateway/cmd/gateway/main.buildHash=$(shell git describe --always --long --dirty)' \
+		-X 'github.com/brisouamaury/gateway/cmd/gateway/main.buildTime=$(shell date)'" \
+		cmd/gateway/main.go
 
 .PHONY: up
 up:  .data/adminer-save

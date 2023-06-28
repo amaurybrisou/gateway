@@ -17,7 +17,6 @@ const ContextKeyCorrelationID ContextKey = "x-correlation-id"
 func Logger(l zerolog.Logger) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 			ww := &responseObserver{ResponseWriter: w}
 			rec := httptest.NewRecorder()
 
@@ -35,7 +34,7 @@ func Logger(l zerolog.Logger) mux.MiddlewareFunc {
 			logger := l.With().Str(string(ContextKeyCorrelationID), cID).Logger()
 			ctx = logger.WithContext(ctx)
 
-			e := logger.Log().Str("path", path) //.Bytes("request_data", reqData)
+			e := logger.Log().Str("path", path)
 			defer func(start time.Time) {
 				e.TimeDiff("latency", time.Now(), start).Send()
 			}(time.Now())

@@ -5,22 +5,27 @@ import (
 	"errors"
 	"net/http"
 	"text/template"
+	"time"
 
-	"github.com/amaurybrisou/gateway/internal/db"
-	"github.com/amaurybrisou/gateway/internal/db/models"
+	"github.com/amaurybrisou/gateway/pkg/core/cryptlib"
+	"github.com/amaurybrisou/gateway/pkg/core/jwtlib"
 	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
+	"github.com/amaurybrisou/gateway/src/database"
+	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
 )
 
 type Service struct {
-	db *db.Database
+	db  *database.Database
+	jwt *jwtlib.JWT
 }
 
-func New(db *db.Database) Service {
+func New(db *database.Database, jwt *jwtlib.JWT) Service {
 	return Service{
-		db: db,
+		db:  db,
+		jwt: jwt,
 	}
 }
 
@@ -100,30 +105,6 @@ func (s Service) GetAllServicesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s Service) CreatePlanHandler(w http.ResponseWriter, r *http.Request) {
-	var plan models.Plan
-	if err := json.NewDecoder(r.Body).Decode(&plan); err != nil {
-		log.Ctx(r.Context()).Err(err).Send()
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	plan.ID = uuid.New()
-
-	createdPlan, err := s.db.CreatePlan(r.Context(), plan.ServiceID, plan.Name, plan.Description, plan.Price, plan.Duration, plan.Currency)
-	if err != nil {
-		log.Ctx(r.Context()).Err(err).Send()
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(createdPlan); err != nil {
-		log.Ctx(r.Context()).Err(err).Send()
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
 func (s Service) ServicePricePage(w http.ResponseWriter, r *http.Request) {
 	serviceName := mux.Vars(r)["service_name"]
 
@@ -170,4 +151,45 @@ func (s Service) ServicePricePage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
+	type Credentials struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	// Parse the request body into a Credentials struct
+	var creds Credentials
+	err := json.NewDecoder(r.Body).Decode(&creds)
+	if err != nil {
+		log.Ctx(r.Context()).Error().Err(err).Msg("Invalid request body")
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.db.GetUserByEmail(r.Context(), creds.Email)
+	if err != nil && !errors.Is(err, database.ErrUserNotFound) {
+		log.Ctx(r.Context()).Error().Err(err).Msg("internal error")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if user.ID == uuid.Nil || !cryptlib.ValidateHash(creds.Password, user.Password) {
+		log.Ctx(r.Context()).Error().Err(err).Msg("invalid credentials")
+		http.Error(w, "invalid credentials", http.StatusForbidden)
+		return
+	}
+
+	// Generate a JWT token with a subject and expiration time
+	token, err := s.jwt.GenerateToken(user.ID.String(), time.Now().Add(time.Hour), time.Now())
+	if err != nil {
+		log.Ctx(r.Context()).Error().Err(err).Msg("failed to generate")
+		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the token as the response
+	response := map[string]string{"token": token}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response) //nolint
 }
