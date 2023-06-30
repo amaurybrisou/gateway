@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"sync"
 	"syscall"
 
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -107,24 +105,4 @@ func signals(ctx context.Context) error {
 	case s := <-sigc:
 		return fmt.Errorf("%s %w", s, errSignalReceived)
 	}
-}
-
-func Logger() {
-	zerolog.CallerMarshalFunc = func(_ uintptr, file string, line int) string {
-		short := file
-		for i := len(file) - 1; i > 0; i-- {
-			if file[i] == '/' {
-				short = file[i+1:]
-				break
-			}
-		}
-		file = short
-		return file + ":" + strconv.Itoa(line)
-	}
-	zerolog.TimestampFieldName = "t"
-	zerolog.LevelFieldName = "l"
-	zerolog.MessageFieldName = "m"
-	zerolog.CallerFieldName = "c"
-
-	log.Logger = zerolog.New(os.Stderr).With().Caller().Timestamp().Logger()
 }

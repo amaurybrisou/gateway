@@ -2,17 +2,25 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+)
+
+const (
+	serviceSelectFields     = "id, name, description, prefix, domain, host, image_url, required_roles"
+	serviceSelectFieldsFull = "id, name, description, prefix, domain, host, image_url, required_roles, pricing_table_key, pricing_table_publishable_key, created_at, updated_at, deleted_at"
+	serviceInsertFields     = "id, name, description, prefix, domain, host, image_url, required_roles, pricing_table_key, pricing_table_publishable_key, created_at"
 )
 
 func (d Database) CreateService(ctx context.Context, s models.Service) (models.Service, error) {
 	query := `
-	INSERT INTO service (id, name, domain, prefix, host, image_url, required_roles, pricing_table_key,
-		pricing_table_publishable_key, created_at)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	INSERT INTO service (` + serviceInsertFields + `)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	ON CONFLICT (name) DO UPDATE
 	SET domain = excluded.domain,
 		prefix = excluded.prefix,
@@ -21,11 +29,25 @@ func (d Database) CreateService(ctx context.Context, s models.Service) (models.S
 		image_url = excluded.image_url,
 		pricing_table_key = excluded.pricing_table_key,
 		pricing_table_publishable_key = excluded.pricing_table_publishable_key
-	RETURNING *;
-	`
+	RETURNING ` + serviceSelectFieldsFull
 
-	err := d.db.QueryRow(ctx, query, s.ID, s.Name, s.Domain, s.Prefix, s.Host, s.ImageURL, s.RequiredRoles, s.PricingTableKey, s.PricingTablePublishableKey, s.CreatedAt).Scan(
-		&s.ID, &s.Name, &s.Domain, &s.Prefix, &s.Host, &s.ImageURL, &s.RequiredRoles, &s.PricingTableKey, &s.PricingTablePublishableKey, &s.CreatedAt, &s.UpdatedAt, &s.DeletedAt)
+	row := d.db.QueryRow(
+		ctx,
+		query,
+		s.ID,
+		s.Name,
+		s.Description,
+		s.Prefix,
+		s.Domain,
+		s.Host,
+		s.ImageURL,
+		s.RequiredRoles,
+		s.PricingTableKey,
+		s.PricingTablePublishableKey,
+		time.Now(),
+	)
+
+	s, err := scanServiceFull(row)
 	if err != nil {
 		return models.Service{}, fmt.Errorf("failed to create service: %w", err)
 	}
@@ -49,25 +71,14 @@ func (d Database) DeleteService(ctx context.Context, serviceID uuid.UUID) (bool,
 
 func (d *Database) GetServiceByID(ctx context.Context, serviceID uuid.UUID) (models.Service, error) {
 	query := `
-		SELECT id, name, prefix, domain, image_url, required_roles, pricing_table_key, pricing_table_publishable_key, created_at, updated_at, deleted_at
+		SELECT ` + serviceSelectFieldsFull + `
 		FROM "service"
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
-	var service models.Service
-	err := d.db.QueryRow(ctx, query, serviceID).Scan(
-		&service.ID,
-		&service.Name,
-		&service.Prefix,
-		&service.Domain,
-		&service.ImageURL,
-		&service.RequiredRoles,
-		&service.PricingTableKey,
-		&service.PricingTablePublishableKey,
-		&service.CreatedAt,
-		&service.UpdatedAt,
-		&service.DeletedAt,
-	)
+	row := d.db.QueryRow(ctx, query, serviceID)
+
+	service, err := scanServiceFull(row)
 	if err != nil {
 		// Handle the error (e.g., return an error response, log the error)
 		return models.Service{}, err
@@ -78,17 +89,110 @@ func (d *Database) GetServiceByID(ctx context.Context, serviceID uuid.UUID) (mod
 
 func (d *Database) GetServiceByName(ctx context.Context, serviceName string) (models.Service, error) {
 	query := `
-		SELECT id, name, prefix, domain, image_url, required_roles, pricing_table_key, pricing_table_publishable_key, created_at, updated_at, deleted_at
+		SELECT ` + serviceSelectFieldsFull + `
 		FROM service
 		WHERE name = $1 AND deleted_at IS NULL
 	`
 
+	row := d.db.QueryRow(ctx, query, serviceName)
+
+	service, err := scanServiceFull(row)
+	if err != nil {
+		// Handle the error (e.g., return an error response, log the error)
+		return models.Service{}, err
+	}
+
+	return service, nil
+}
+
+func (d Database) GetServices(ctx context.Context) ([]*models.Service, error) {
+	query := `SELECT ` + serviceSelectFieldsFull + ` FROM service`
+
+	rows, err := d.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query services: %w", err)
+	}
+	defer rows.Close()
+
+	var services []*models.Service
+	for rows.Next() {
+		service, err := scanServiceFull(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan service row: %w", err)
+		}
+		services = append(services, &service)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error occurred while reading services: %w", err)
+	}
+
+	return services, nil
+}
+
+func (d *Database) GetServiceByPrefixOrDomain(ctx context.Context, prefix, domain string) (models.Service, error) {
+	query := `
+        SELECT ` + serviceSelectFields + `
+        FROM service
+        WHERE prefix = $1 OR domain = $2
+        LIMIT 1
+    `
+
+	row := d.db.QueryRow(ctx, query, prefix, domain)
+
+	service, err := scanService(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service, fmt.Errorf("service not found")
+		}
+		return service, err
+	}
+
+	return service, nil
+}
+
+func (d *Database) UpdateServiceStatus(ctx context.Context, serviceID uuid.UUID, status string) error {
+	query := `
+        UPDATE service
+        SET status = $1
+        WHERE id = $2
+    `
+
+	_, err := d.db.Exec(ctx, query, status, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to update service status: %w", err)
+	}
+
+	return nil
+}
+
+func scanService(row localRow) (models.Service, error) {
 	var service models.Service
-	err := d.db.QueryRow(ctx, query, serviceName).Scan(
+	err := row.Scan(
 		&service.ID,
 		&service.Name,
+		&service.Description,
 		&service.Prefix,
 		&service.Domain,
+		&service.Host,
+		&service.ImageURL,
+		&service.RequiredRoles,
+	)
+	if err != nil {
+		return models.Service{}, fmt.Errorf("failed to scan service row: %w", err)
+	}
+	return service, nil
+}
+
+func scanServiceFull(row localRow) (models.Service, error) {
+	var service models.Service
+	err := row.Scan(
+		&service.ID,
+		&service.Name,
+		&service.Description,
+		&service.Prefix,
+		&service.Domain,
+		&service.Host,
 		&service.ImageURL,
 		&service.RequiredRoles,
 		&service.PricingTableKey,
@@ -98,47 +202,7 @@ func (d *Database) GetServiceByName(ctx context.Context, serviceName string) (mo
 		&service.DeletedAt,
 	)
 	if err != nil {
-		// Handle the error (e.g., return an error response, log the error)
-		return models.Service{}, err
+		return models.Service{}, fmt.Errorf("failed to scan service row: %w", err)
 	}
-
 	return service, nil
-}
-
-func (d Database) GetServices(ctx context.Context) ([]models.Service, error) {
-	query := `SELECT id, name, prefix, domain, host, image_url, required_roles, pricing_table_key, pricing_table_publishable_key, created_at, updated_at, deleted_at FROM service`
-
-	rows, err := d.db.Query(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query services: %w", err)
-	}
-	defer rows.Close()
-
-	var services []models.Service
-	for rows.Next() {
-		var service models.Service
-		if err := rows.Scan(
-			&service.ID,
-			&service.Name,
-			&service.Prefix,
-			&service.Domain,
-			&service.Host,
-			&service.ImageURL,
-			&service.RequiredRoles,
-			&service.PricingTableKey,
-			&service.PricingTablePublishableKey,
-			&service.CreatedAt,
-			&service.UpdatedAt,
-			&service.DeletedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan service row: %w", err)
-		}
-		services = append(services, service)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error occurred while reading services: %w", err)
-	}
-
-	return services, nil
 }

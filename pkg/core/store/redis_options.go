@@ -37,7 +37,7 @@ func (r *RedisClient) start(ctx context.Context) error {
 		DB:       0,
 	})
 
-	log.Ctx(ctx).Debug().Str("address", addr).Msg("start redis client")
+	log.Ctx(ctx).Info().Str("address", addr).Msg("start redis client")
 
 	_, err := conn.Ping().Result()
 	if err != nil {
@@ -54,7 +54,7 @@ func (r *RedisClient) Close(ctx context.Context) error {
 	if r.Client == nil {
 		return nil
 	}
-	log.Ctx(ctx).Debug().Str("address", r.Client.String()).Msg("closing redis client")
+	log.Ctx(ctx).Info().Str("address", r.Client.String()).Msg("closing redis client")
 	return r.Client.Close()
 }
 

@@ -14,7 +14,7 @@ type logLevelOption struct {
 }
 
 func WithLogLevel(level string) Options {
-	log.Warn().Str("level", level).Msg("logging level")
+	log.Info().Str("level", level).Msg("logging level")
 	return &logLevelOption{Level: level}
 }
 

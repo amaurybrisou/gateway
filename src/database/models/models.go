@@ -26,6 +26,7 @@ const (
 type Service struct {
 	ID                         uuid.UUID `json:"id"`
 	Name                       string    `json:"name"`
+	Description                string    `json:"description"`
 	Prefix                     string    `json:"prefix"`
 	Domain                     string    `json:"domain"`
 	Host                       string    `json:"host"`
@@ -33,10 +34,37 @@ type Service struct {
 	PricingTableKey            string    `json:"pricing_table_key"`
 	PricingTablePublishableKey string    `json:"pricing_table_publishable_key"`
 
+	RetryCount int
+
 	RequiredRoles []Role     `json:"required_roles"`
+	Status        string     `json:"status"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     *time.Time `json:"updated_at"`
 	DeletedAt     *time.Time `json:"deleted_at"`
+}
+
+func (s Service) GetHost() string {
+	return s.Host
+}
+
+func (s Service) GetRetryCount() int {
+	return s.RetryCount
+}
+
+func (s *Service) SetRetryCount(c int) {
+	s.RetryCount = c
+}
+
+func (s Service) GetID() uuid.UUID {
+	return s.ID
+}
+
+func (s *Service) SetStatus(st string) {
+	s.Status = st
+}
+
+func (s Service) GetStatus() string {
+	return string(s.Status)
 }
 
 func (s Service) HasRole(r Role) bool {

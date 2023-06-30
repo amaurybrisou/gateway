@@ -4,18 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
+const (
+	userSelectFields     = "id, external_id, email, avatar, firstname, lastname, role, stripe_key, created_at"
+	userSelectFieldsFull = "id, external_id, email, avatar, firstname, lastname, role, stripe_key, created_at, updated_at, deleted_at"
+)
+
 func (d Database) CreateUser(ctx context.Context, u models.User) (models.User, error) {
 	query := `
-		INSERT INTO "user" (id, external_id, email, password,  avatar, firstname, lastname, role, stripe_key, created_at)
+		INSERT INTO "user" (` + userSelectFields + `, password)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT DO NOTHING
-		RETURNING id, external_id, email, avatar, firstname, lastname, role, stripe_key, created_at`
+		RETURNING ` + userSelectFields
 
 	err := d.db.QueryRow(
 		ctx,
@@ -23,13 +29,13 @@ func (d Database) CreateUser(ctx context.Context, u models.User) (models.User, e
 		u.ID,
 		u.ExternalID,
 		u.Email,
-		u.Password,
 		u.AvatarURL,
 		u.Firstname,
 		u.Lastname,
 		u.Role,
 		u.StripeKey,
-		u.CreatedAt,
+		time.Now(),
+		u.Password,
 	).Scan(
 		&u.ID, &u.ExternalID, &u.Email, &u.AvatarURL, &u.Firstname, &u.Lastname, &u.Role, &u.StripeKey, &u.CreatedAt)
 	if err != nil {
@@ -61,24 +67,13 @@ func (d Database) UpdateUser(ctx context.Context, u models.User) (models.User, e
 
 func (d *Database) GetUserByID(ctx context.Context, userID uuid.UUID) (models.User, error) {
 	query := `
-		SELECT id, external_id, email, firstname, lastname, role, stripe_key, created_at, updated_at, deleted_at
+		SELECT ` + userSelectFieldsFull + `
 		FROM "user"
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
-	var user models.User
-	err := d.db.QueryRow(ctx, query, userID).Scan(
-		&user.ID,
-		&user.ExternalID,
-		&user.Email,
-		&user.Firstname,
-		&user.Lastname,
-		&user.Role,
-		&user.StripeKey,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&user.DeletedAt,
-	)
+	row := d.db.QueryRow(ctx, query, userID)
+	user, err := scanUserFull(row)
 	if err != nil {
 		// Handle the error (e.g., return an error response, log the error)
 		return models.User{}, err
@@ -89,24 +84,13 @@ func (d *Database) GetUserByID(ctx context.Context, userID uuid.UUID) (models.Us
 
 func (d *Database) GetFullUserByEmail(ctx context.Context, userEmail string) (models.User, error) {
 	query := `
-		SELECT id, external_id, email, firstname, lastname, role, stripe_key, created_at, updated_at, deleted_at
+		SELECT ` + userSelectFieldsFull + `
 		FROM "user"
 		WHERE email = $1 AND deleted_at IS NULL
 	`
 
-	var user models.User
-	err := d.db.QueryRow(ctx, query, userEmail).Scan(
-		&user.ID,
-		&user.ExternalID,
-		&user.Email,
-		&user.Firstname,
-		&user.Lastname,
-		&user.Role,
-		&user.StripeKey,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&user.DeletedAt,
-	)
+	row := d.db.QueryRow(ctx, query, userEmail)
+	user, err := scanUserFull(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.User{}, nil
@@ -153,10 +137,8 @@ var (
 )
 
 func (d *Database) GetUserByEmail(ctx context.Context, email string) (models.User, error) {
-	var user models.User
-
-	err := d.db.QueryRow(ctx, `SELECT id, email, password, role FROM "user" WHERE email = $1 AND deleted_at IS NULL`, email).
-		Scan(&user.ID, &user.Email, &user.Password, &user.Role)
+	row := d.db.QueryRow(ctx, `SELECT `+userSelectFields+`, password FROM "user" WHERE email = $1 AND deleted_at IS NULL`, email)
+	user, err := scanUserWitPassword(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return user, ErrUserNotFound
@@ -165,4 +147,38 @@ func (d *Database) GetUserByEmail(ctx context.Context, email string) (models.Use
 	}
 
 	return user, nil
+}
+
+func scanUserWitPassword(row localRow) (u models.User, err error) {
+	err = row.Scan(
+		&u.ID,
+		&u.ExternalID,
+		&u.Email,
+		&u.AvatarURL,
+		&u.Firstname,
+		&u.Lastname,
+		&u.Role,
+		&u.StripeKey,
+		&u.CreatedAt,
+		&u.Password,
+	)
+	return u, err
+}
+
+func scanUserFull(row localRow) (u models.User, err error) {
+	err = row.Scan(
+		&u.ID,
+		&u.ExternalID,
+		&u.Email,
+		&u.AvatarURL,
+		&u.Firstname,
+		&u.Lastname,
+		&u.Role,
+		&u.StripeKey,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+		&u.DeletedAt,
+	)
+
+	return u, err
 }

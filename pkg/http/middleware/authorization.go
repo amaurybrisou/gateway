@@ -9,22 +9,21 @@ import (
 
 	"github.com/amaurybrisou/gateway/pkg/core/jwtlib"
 	coremodels "github.com/amaurybrisou/gateway/pkg/core/models"
-	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
 type AuthMiddlewareService struct {
-	db  *database.Database
-	jwt *jwtlib.JWT
+	jwt         *jwtlib.JWT
+	getUserFunc func(context.Context, uuid.UUID) (coremodels.UserInterface, error)
 }
 
-func NewAuthMiddleware(db *database.Database, jwt *jwtlib.JWT) AuthMiddlewareService {
-	return AuthMiddlewareService{db: db, jwt: jwt}
+func NewAuthMiddleware(jwt *jwtlib.JWT, getUserFunc func(context.Context, uuid.UUID) (coremodels.UserInterface, error)) AuthMiddlewareService {
+	return AuthMiddlewareService{jwt: jwt, getUserFunc: getUserFunc}
 }
 
-func (s AuthMiddlewareService) IsAdmin(next http.Handler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (s AuthMiddlewareService) IsAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		isAdmin := IsAdmin(r.Context())
 		if !isAdmin {
 			log.Ctx(r.Context()).Error().Err(errors.New("not admin")).Msg("Unauthorized")
@@ -32,7 +31,7 @@ func (s AuthMiddlewareService) IsAdmin(next http.Handler) http.HandlerFunc {
 			return
 		}
 		next.ServeHTTP(w, r)
-	}
+	})
 }
 
 func (s AuthMiddlewareService) JWTAuth(next http.Handler) http.Handler {
@@ -63,7 +62,7 @@ func (s AuthMiddlewareService) JWTAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		user, err := s.db.GetUserByID(r.Context(), userID)
+		user, err := s.getUserFunc(r.Context(), userID)
 		if err != nil {
 			log.Ctx(r.Context()).Error().Err(err).Msg("Unauthorized")
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)

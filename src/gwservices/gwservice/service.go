@@ -12,6 +12,7 @@ import (
 	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/database/models"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
@@ -54,7 +55,7 @@ func (s Service) CreateServiceHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s Service) DeleteServiceHandler(w http.ResponseWriter, r *http.Request) {
-	serviceID := r.URL.Query().Get("serviceID")
+	serviceID := chi.URLParam(r, "serviceID")
 	if serviceID == "" {
 		log.Ctx(r.Context()).Err(errors.New("serviceID missing")).Send()
 		http.Error(w, "serviceID parameter is missing", http.StatusBadRequest)

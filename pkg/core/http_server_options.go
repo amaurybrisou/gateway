@@ -17,7 +17,7 @@ type httpServerOption struct {
 
 func (h *httpServerOption) Start(ctx context.Context) error {
 	return func() error {
-		log.Ctx(ctx).Debug().
+		log.Ctx(ctx).Info().
 			Str("address", h.srv.Addr).
 			Bool("tls_enabled", h.srv.TLSConfig != nil).
 			Msg("start http server")
@@ -31,7 +31,7 @@ func (h *httpServerOption) Start(ctx context.Context) error {
 }
 
 func (h *httpServerOption) Stop(ctx context.Context) error {
-	log.Ctx(ctx).Debug().Msg("closing http server")
+	log.Ctx(ctx).Info().Msg("closing http server")
 	return h.srv.Close()
 }
 

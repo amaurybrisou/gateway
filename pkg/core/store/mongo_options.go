@@ -31,7 +31,7 @@ func NewMongoClient(ctx context.Context, username, password, addr string, port i
 }
 
 func (r *MongoClient) start(ctx context.Context) error {
-	log.Ctx(ctx).Debug().Msg("start mongo client")
+	log.Ctx(ctx).Info().Msg("start mongo client")
 
 	ctx, cancel := context.WithTimeout(context.Background(),
 		30*time.Second)
@@ -57,7 +57,7 @@ func (r *MongoClient) Close(ctx context.Context) error {
 	if r.Client == nil {
 		return nil
 	}
-	log.Ctx(ctx).Debug().Str("address", r.addr).Msg("closing mongo client")
+	log.Ctx(ctx).Info().Str("address", r.addr).Msg("closing mongo client")
 	return r.Client.Disconnect(ctx)
 }
 

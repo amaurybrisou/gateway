@@ -34,6 +34,7 @@ func (s Services) Payment() payment.Service {
 type ServiceConfig struct {
 	PaymentConfig payment.Config
 	JwtConfig     jwtlib.Config
+	ProxyConfig   proxy.Config
 }
 
 func NewServices(db *database.Database, cfg ServiceConfig) Services {
@@ -42,7 +43,7 @@ func NewServices(db *database.Database, cfg ServiceConfig) Services {
 	return Services{
 		jwt:     jwt,
 		svc:     gwservice.New(db, jwt),
-		proxy:   proxy.New(db),
+		proxy:   proxy.New(db, cfg.ProxyConfig),
 		payment: payment.NewService(db, jwt, cfg.PaymentConfig),
 	}
 }

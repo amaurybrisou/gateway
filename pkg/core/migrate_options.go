@@ -23,7 +23,7 @@ func (m Migrate) New(c *core) {
 }
 
 func (m Migrate) Start(ctx context.Context) error {
-	log.Ctx(ctx).Debug().Msg("migrating database")
+	log.Ctx(ctx).Info().Msg("migrating database")
 	mig, err := migrate.New(m.path, m.url)
 	if err != nil {
 		log.Ctx(ctx).Error().Err(err).Msg("migrating database")

@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"context"
+	"errors"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -9,108 +9,85 @@ import (
 
 	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
 	"github.com/amaurybrisou/gateway/src/database"
-	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
 type Proxy struct {
-	db          *database.Database
-	servicesMap map[string]*models.Service
+	db                  *database.Database
+	stripPrefix         string
+	notFoundRedirectURL string
+	noRoleRedirectURL   string
 }
 
-func New(db *database.Database) Proxy {
-	services, err := db.GetServices(context.Background())
+type Config struct {
+	StripPrefix         string
+	NotFoundRedirectURL string
+	NoRoleRedirectURL   string
+}
+
+func New(db *database.Database, cfg Config) Proxy {
+	return Proxy{
+		db:                  db,
+		stripPrefix:         cfg.StripPrefix,
+		notFoundRedirectURL: cfg.NotFoundRedirectURL,
+		noRoleRedirectURL:   cfg.NoRoleRedirectURL,
+	}
+}
+
+func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
+	pathPrefix := s.extractPathPrefix(r.URL.Path)
+
+	// Lookup the backend URL based on the path prefix
+	service, err := s.db.GetServiceByPrefixOrDomain(r.Context(), pathPrefix, r.Host)
 	if err != nil {
-		panic(err)
+		log.Ctx(r.Context()).Warn().Err(err).Msg("backend not found")
+		http.Redirect(w, r, s.notFoundRedirectURL, http.StatusPermanentRedirect)
+		return
 	}
 
-	sI := Proxy{db: db, servicesMap: map[string]*models.Service{}}
-	for i := range services {
-		s := services[i]
-		sI.servicesMap[s.Prefix] = &s
-		sI.servicesMap[s.Domain] = &s
+	userID, ok := r.Context().Value(coremiddleware.UserIDCtxKey).(uuid.UUID)
+	if !ok {
+		log.Ctx(r.Context()).Error().Err(errors.New("invalid user_id")).Send()
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
 	}
 
-	return sI
-}
-
-func (s Proxy) ProxyHandler(next http.HandlerFunc) http.HandlerFunc {
-	// Create a reverse proxy
-	return func(w http.ResponseWriter, r *http.Request) {
-		proxy := &httputil.ReverseProxy{
-			Director: func(r *http.Request) {
-				// Extract the path prefix from the request URL
-				pathPrefix := extractPathPrefix(r.URL.Path)
-
-				// Lookup the backend URL based on the path prefix
-				service, ok := s.servicesMap[pathPrefix]
-				if !ok {
-					service, ok = s.servicesMap[r.Host]
-					if !ok {
-						// No matching backend URL found, return a 404 response
-						log.Ctx(r.Context()).Error().Msg("backend not found")
-						next(w, r)
-						return
-					}
-				}
-
-				userID, ok := r.Context().Value(coremiddleware.UserIDCtxKey).(uuid.UUID)
-				if !ok {
-					// log.Ctx(r.Context()).Err(errors.New("invalid user_id")).Send()
-					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-					return
-				}
-
-				hasRole, err := s.db.HasRole(r.Context(), userID, service.RequiredRoles...)
-				if err != nil {
-					log.Ctx(r.Context()).Err(err).Msg("determine user roles")
-					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-					return
-				}
-
-				if !hasRole {
-					next(w, r)
-					return
-				}
-
-				// Set the backend URL as the target URL for the reverse proxy
-				targetURL, err := url.Parse(service.Host)
-				if err != nil {
-					log.Ctx(r.Context()).Err(err).Msg("Failed to parse backend URL")
-					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-					return
-				}
-
-				// Set the target URL for the reverse proxy
-				r.URL.Scheme = targetURL.Scheme
-				r.URL.Host = targetURL.Host
-				r.URL.Path = singleJoiningSlash(targetURL.Path, r.URL.Path)
-				r.Host = targetURL.Host
-			},
-		}
-
-		services, err := s.db.GetServices(context.Background())
-		if err != nil {
-			log.Ctx(r.Context()).Err(err).Msg("fetch services")
-			http.Error(w, "fetch services", http.StatusInternalServerError)
-			return
-		}
-
-		s.servicesMap = make(map[string]*models.Service, len(services)*2)
-		for i := range services {
-			cs := services[i]
-			s.servicesMap[cs.Prefix] = &cs
-			s.servicesMap[cs.Domain] = &cs
-		}
-
-		proxy.ServeHTTP(w, r)
+	hasRole, err := s.db.HasRole(r.Context(), userID, service.RequiredRoles...)
+	if err != nil {
+		log.Ctx(r.Context()).Error().Err(err).Msg("determine user roles")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
 	}
+
+	if !hasRole {
+		http.Redirect(w, r, s.noRoleRedirectURL+"/"+service.Name, http.StatusTemporaryRedirect)
+		return
+	}
+
+	// Set the backend URL as the target URL for the reverse proxy
+	targetURL, err := url.Parse(service.Host)
+	if err != nil {
+		log.Ctx(r.Context()).Error().Err(err).Msg("Failed to parse backend URL")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.Out.URL.Scheme = targetURL.Scheme
+			pr.Out.URL.Host = targetURL.Host
+			pr.Out.URL.Path = singleJoiningSlash(targetURL.Path, pathPrefix)
+			pr.Out.Host = targetURL.Host
+		},
+	}
+
+	proxy.ServeHTTP(w, r)
 }
 
 // Helper function to extract the path prefix from a URL.
-func extractPathPrefix(path string) string {
-	path = strings.Split(path, "/")[1] // Assuming the path has a leading slash
+func (p Proxy) extractPathPrefix(path string) string {
+	path = strings.Split(strings.TrimPrefix(path, p.stripPrefix), "/")[1] // Assuming the path has a leading slash
 	return "/" + strings.Split(path, "/")[0]
 }
 

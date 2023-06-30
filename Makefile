@@ -94,4 +94,13 @@ $(MIGRATE_DIR):
 
 .PHONY: install
 install: $(GOBIN)/migrate
-	
+
+${GOBIN}/go-callvis:
+	GOBIN=${GOBIN} go install github.com/ofabry/go-callvis@latest
+
+.PHONY: tools
+tools: ${GOBIN}/go-callvis
+
+.PHONY: callvis
+callvis: tools
+	${GOBIN}/go-callvis cmd/gateway/main.go

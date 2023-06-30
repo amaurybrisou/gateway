@@ -34,7 +34,7 @@ func (o *SocketServerOption) Start(ctx context.Context) error {
 		return err
 	}
 
-	log.Ctx(ctx).Debug().
+	log.Ctx(ctx).Info().
 		Str("address", fd.Addr().String()).
 		Msg("start socket server")
 
@@ -73,7 +73,7 @@ func (o *SocketServerOption) Start(ctx context.Context) error {
 }
 
 func (o *SocketServerOption) Stop(ctx context.Context) error {
-	log.Ctx(ctx).Debug().Msg("closing socket server")
+	log.Ctx(ctx).Info().Msg("closing socket server")
 	if o.fd != nil {
 		return o.fd.Close()
 	}

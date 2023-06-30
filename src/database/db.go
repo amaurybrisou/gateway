@@ -11,3 +11,7 @@ type Database struct {
 func New(db *pgxpool.Pool) *Database {
 	return &Database{db: db}
 }
+
+type localRow interface {
+	Scan(...any) error
+}
