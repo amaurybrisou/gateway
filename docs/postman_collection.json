@@ -1,0 +1,415 @@
+{
+	"info": {
+		"_postman_id": "a196b015-9970-41a6-998f-f05aa282beba",
+		"name": "Gateway",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "12604",
+		"_collection_link": "https://martian-eclipse-352644.postman.co/workspace/Fonorama~a5639321-a7e3-4171-bc84-68f70a1eaab6/collection/12604-a196b015-9970-41a6-998f-f05aa282beba?action=share&creator=12604&source=collection_link"
+	},
+	"item": [
+		{
+			"name": "login",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Your test name\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.collectionVariables.set(\"token\", jsonData.token);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"gateway@gateway.com\",\n    \"password\":  \"w9oHDCAlPxT12WbH\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8089/login",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8089",
+					"path": [
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "create hello service",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Your test name\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.collectionVariables.set(`${jsonData.name}_service_id`, jsonData.id);",
+							"    pm.collectionVariables.set(`${jsonData.name}_service_name`, jsonData.name);",
+							"    pm.collectionVariables.set(`${jsonData.name}_service_prefix`, jsonData.prefix);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"hello\",\n    \"required_roles\": [\"hello\"],\n    \"prefix\": \"/hello\",\n    \"domain\": \"hello.test:8089\",\n    \"host\": \"http://localhost:8092\",\n    \"pricing_table_key\": \"prctbl_1NNfMoGlmycTmuoaqYn1mVSt\",\n    \"pricing_table_publishable_key\": \"pk_test_51I6wtNGlmycTmuoawC3kgWPDjIxGTDTV1BsqglnLsEuCccdcegx9cJM2deTlyJPob4TXLpIr5RQqIDgtR3FgLmqV00NwhdlYs2\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8089/auth/admin/services",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8089",
+					"path": [
+						"auth",
+						"admin",
+						"services"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "create hello 2 service",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Your test name\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.collectionVariables.set(`${jsonData.name}_service_id`, jsonData.id);",
+							"    pm.collectionVariables.set(`${jsonData.name}_service_name`, jsonData.name);",
+							"    pm.collectionVariables.set(`${jsonData.name}_service_prefix`, jsonData.prefix);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"hello2\",\n    \"required_roles\": [\"hello2\"],\n    \"prefix\": \"/hello2\",\n    \"domain\": \"hello2.test:8089\",\n    \"host\": \"http://localhost:8092\",\n    \"pricing_table_key\": \"prctbl_1NNfMoGlmycTmuoaqYn1mVSt\",\n    \"pricing_table_publishable_key\": \"pk_test_51I6wtNGlmycTmuoawC3kgWPDjIxGTDTV1BsqglnLsEuCccdcegx9cJM2deTlyJPob4TXLpIr5RQqIDgtR3FgLmqV00NwhdlYs2\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8089/auth/admin/services",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8089",
+					"path": [
+						"auth",
+						"admin",
+						"services"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get all services",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Your test name\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    for(s of jsonData) {",
+							"         pm.collectionVariables.set(`${s.name}_service_id`, s.id);",
+							"         pm.collectionVariables.set(`${s.name}_service_name`, s.name);",
+							"         pm.collectionVariables.set(`${s.name}_service_prefix`, s.prefix);",
+							"    }",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8089/services",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8089",
+					"path": [
+						"services"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "delete hello service",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8089/auth/admin/services/{{hello_service_id}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8089",
+					"path": [
+						"auth",
+						"admin",
+						"services",
+						"{{hello_service_id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "delete hello2 service",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8089/auth/admin/services/{{hello2_service_id}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8089",
+					"path": [
+						"auth",
+						"admin",
+						"services",
+						"{{hello2_service_id}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "hello pricing",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"helloworld\",\n    \"required_roles\": [\"hello\"],\n    \"prefix\": \"/hello\",\n    \"domain\": \"hello.test:8089\",\n    \"host\": \"http://localhost:8090\",\n    \"pricing_table\": \"<script async src=\\\"https://js.stripe.com/v3/pricing-table.js\\\"></script><stripe-pricing-table pricing-table-id=\\\"prctbl_1NNJ0GGlmycTmuoaBGtnofcM\\\"publishable-key=\\\"pk_test_51I6wtNGlmycTmuoawC3kgWPDjIxGTDTV1BsqglnLsEuCccdcegx9cJM2deTlyJPob4TXLpIr5RQqIDgtR3FgLmqV00NwhdlYs2\\\"></stripe-pricing-table>\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8089/pricing/{{hello_service_name}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8089",
+					"path": [
+						"pricing",
+						"{{hello_service_name}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "access hello service by prefix",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8089/auth{{hello_service_prefix}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8089",
+					"path": [
+						"auth{{hello_service_prefix}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "access hello service by domain",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://hello.test:8089",
+					"protocol": "http",
+					"host": [
+						"hello",
+						"test"
+					],
+					"port": "8089"
+				}
+			},
+			"response": []
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "token",
+			"value": "",
+			"type": "default"
+		},
+		{
+			"key": "hello_service_id",
+			"value": ""
+		},
+		{
+			"key": "hello_service_name",
+			"value": ""
+		},
+		{
+			"key": "hello_service_prefix",
+			"value": ""
+		},
+		{
+			"key": "hello2_service_id",
+			"value": ""
+		},
+		{
+			"key": "hello2_service_name",
+			"value": ""
+		},
+		{
+			"key": "hello2_service_prefix",
+			"value": ""
+		}
+	]
+}

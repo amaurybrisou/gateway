@@ -1,5 +1,19 @@
 version: "3"
 services:
+  backend:
+    platform: linux/amd64
+    build:
+      context: "."
+      args:
+        GIT_HASH: "local"
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8089:8089"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: postgres:9
     restart: unless-stopped
@@ -42,17 +56,17 @@ services:
   #   volumes:
   #     - $PWD/.data/pgadmin:/var/lib/pgadmin
 
-  grafana:
-    image: grafana/grafana
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3000:3000"
-    user: "0"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - $PWD/.data/grafana:/var/lib/grafana
-    depends_on:
-      postgres:
-        condition: service_healthy
+  # grafana:
+  #   image: grafana/grafana
+  #   restart: unless-stopped
+  #   ports:
+  #     - "127.0.0.1:3000:3000"
+  #   user: "1000"
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #   volumes:
+  #     - $PWD/.data/grafana:/var/lib/grafana
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy

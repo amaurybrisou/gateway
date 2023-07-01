@@ -31,13 +31,16 @@ config:
 build:
 	@echo "> Build backend..."
 	go build -ldflags=" \
-		-X 'github.com/brisouamaury/gateway/cmd/gateway/main.buildVersion=$(shell git describe --abbrev=0 --tags)' \
-		-X 'github.com/brisouamaury/gateway/cmd/gateway/main.buildHash=$(shell git describe --always --long --dirty)' \
-		-X 'github.com/brisouamaury/gateway/cmd/gateway/main.buildTime=$(shell date)'" \
-		cmd/gateway/main.go
+		-X 'github.com/amaurybrisou/gateway/src.BuildHash=$(shell git describe --abbrev=0 --tags)' \
+		-X 'github.com/amaurybrisou/gateway/src.BuildHash=$(shell git describe --always --long --dirty)' \
+		-X 'github.com/amaurybrisou/gateway/src.BuildTime=$(shell date)'" \
+		-o $(GOBIN)/backend cmd/gateway/main.go 
+
+.data/adminer-save:
+	mkdir -p $@ && chmod o+w $@
 
 .PHONY: up
-up:  .data/adminer-save
+up:  #.data/adminer-save
 	@echo '+==============================================================================+'
 	@echo '+ This command starts a local backend with all the required dependencies.      +'
 	@echo '+                                                                              +'
@@ -79,7 +82,7 @@ m-up: $(GOBIN)/migrate
 
 .PHONY: down
 m-down: $(GOBIN)/migrate
-	$(GOBIN)/$(MIGRATE_BINARY) -path $(shell PWD)./migrations -database postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable down
+	$(GOBIN)/$(MIGRATE_BINARY) -path $(ROOT_DIR)/migrations -database postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable down
 
 .PHONY: create-migration
 create-migration: $(GOBIN)/migrate

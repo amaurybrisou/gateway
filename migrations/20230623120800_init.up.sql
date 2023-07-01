@@ -21,6 +21,8 @@ CREATE TABLE "user" (
 CREATE TABLE "service" (
     "id" UUID PRIMARY KEY,
     "name" TEXT NOT NULL UNIQUE,
+    "description" TEXT NOT NULL,
+    "status" TEXT,
     "domain" TEXT UNIQUE,
     "prefix" TEXT NOT NULL UNIQUE,
     "host" TEXT NOT NULL,
@@ -44,3 +46,7 @@ CREATE TABLE "user_role" (
     PRIMARY KEY ("user_id", "role"),
     FOREIGN KEY ("user_id") REFERENCES "user"("id")
 );
+
+-- temporary password: w9oHDCAlPxT12WbH
+INSERT INTO "user" ("id", "external_id", "email", "avatar", "firstname", "lastname", "password", "role", "stripe_key", "created_at", "updated_at", "deleted_at") VALUES
+('d179fd63-0b0f-4f35-9f15-f903a394c035',	'',	'gateway@gateway.com',	'',	'Seigneur',	'',	'$2a$10$gS.0eGpOQMZ5sJn0X2m4teBgA6zD9OL2bTY/Y2D/Ui8fZN3.65bVO',	'ADMIN',	NULL,	'2023-06-30 06:53:45.886516',	NULL,	NULL);

@@ -99,8 +99,8 @@ func (m *heartBeatAt) Stop(ctx context.Context) error {
 }
 
 type localTicker struct {
-	ticker *time.Ticker
-	host   string
+	ticker  *time.Ticker
+	service Service
 }
 
 type healthCheckResult struct {
@@ -120,6 +120,7 @@ func (m *heartBeatAt) Start(ctx context.Context) error {
 			log.Ctx(ctx).Info().Msg("closing loop management")
 			return nil
 		default:
+			<-time.After(m.runningInterval)
 			services, err := m.fetchservicesFunc(ctx)
 			if err != nil {
 				log.Ctx(ctx).Error().Err(err).Send()
@@ -132,30 +133,38 @@ func (m *heartBeatAt) Start(ctx context.Context) error {
 }
 
 func (m *heartBeatAt) updateTickers(ctx context.Context, services []Service) {
+	if len(services) == 0 && len(m.serviceTickers) == 0 {
+		return
+	}
 	m.tickerLock.Lock()
 	serviceTickers := m.serviceTickers
 	m.tickerLock.Unlock()
 
 	updatedTickers := make(map[uuid.UUID]*localTicker)
 
-	for _, service := range services {
-		ticker, ok := serviceTickers[service.GetID()]
-		if ok && service.GetHost() != ticker.host {
-			ticker.ticker.Stop()
-			delete(serviceTickers, service.GetID())
-			ok = false
-		}
+	servicesMap := make(map[uuid.UUID]Service)
+	for _, svc := range services {
+		servicesMap[svc.GetID()] = svc
+	}
 
+	for _, ticker := range serviceTickers {
+		service, ok := servicesMap[ticker.service.GetID()]
 		if !ok {
-			ticker := time.NewTicker(m.runningInterval)
-			updatedTickers[service.GetID()] = &localTicker{
-				ticker: ticker,
-				host:   service.GetHost(),
-			}
+			ticker.ticker.Stop()
+			continue
+		}
+		updatedTickers[service.GetID()] = ticker
+	}
 
-			go m.runTicker(ctx, service, ticker)
-		} else {
+	for _, service := range servicesMap {
+		if _, ok := updatedTickers[service.GetID()]; !ok {
+			ticker := &localTicker{
+				ticker:  time.NewTicker(m.runningInterval),
+				service: service,
+			}
 			updatedTickers[service.GetID()] = ticker
+
+			go m.runTicker(ctx, ticker)
 		}
 	}
 
@@ -164,36 +173,36 @@ func (m *heartBeatAt) updateTickers(ctx context.Context, services []Service) {
 	m.tickerLock.Unlock()
 }
 
-func (m *heartBeatAt) runTicker(ctx context.Context, service Service, ticker *time.Ticker) {
+func (m *heartBeatAt) runTicker(ctx context.Context, ticker *localTicker) {
 	defer func() {
-		ticker.Stop()
-		log.Ctx(ctx).Debug().Msgf("service %s ticker stopped", service.GetID().String())
+		ticker.ticker.Stop()
+		log.Ctx(ctx).Debug().Msgf("service %s ticker stopped", ticker.service.GetID())
 	}()
 
-	log.Ctx(ctx).Debug().Msgf("service %s created", service.GetID().String())
+	log.Ctx(ctx).Debug().Msgf("service %s created", ticker.service.GetID())
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			go m.checkServiceHealth(ctx, service)
+		case <-ticker.ticker.C:
+			go m.checkServiceHealth(ctx, ticker)
 		}
 	}
 }
 
-func (m *heartBeatAt) checkServiceHealth(ctx context.Context, service Service) {
+func (m *heartBeatAt) checkServiceHealth(ctx context.Context, ticker *localTicker) {
 	result := healthCheckResult{
-		service: service,
+		service: ticker.service,
 		err:     nil,
 	}
 
-	url := fmt.Sprintf("%s%s", service.GetHost(), m.requestPath)
+	url := fmt.Sprintf("%s%s", ticker.service.GetHost(), m.requestPath)
 
 	resp, err := m.httpCli.Get(url)
 	if err != nil {
 		result.service.SetStatus(err.Error())
-		m.updateRetryCount(service)
+		m.updateRetryCount(ticker.service)
 
 		result.err = fmt.Errorf("failed to perform health check request: %w", err)
 		m.resultsCh <- result
@@ -204,7 +213,7 @@ func (m *heartBeatAt) checkServiceHealth(ctx context.Context, service Service) {
 	result.service.SetStatus(http.StatusText(resp.StatusCode))
 
 	if resp.StatusCode != http.StatusOK {
-		m.updateRetryCount(service)
+		m.updateRetryCount(ticker.service)
 
 		log.Ctx(ctx).Error().Err(fmt.Errorf("%d", resp.StatusCode)).Send()
 
@@ -212,18 +221,22 @@ func (m *heartBeatAt) checkServiceHealth(ctx context.Context, service Service) {
 		return
 	}
 
-	m.resetRetryCount(service)
+	m.resetRetryCount(ticker.service)
 	m.resultsCh <- result
 }
 func (m *heartBeatAt) updateRetryCount(service Service) {
 	retryCount := service.GetRetryCount() + 5
 	service.SetRetryCount(retryCount)
-	m.serviceTickers[service.GetID()].ticker.Reset(m.runningInterval + time.Second*time.Duration(retryCount))
+	if s, ok := m.serviceTickers[service.GetID()]; ok {
+		s.ticker.Reset(m.runningInterval + time.Second*time.Duration(retryCount))
+	}
 }
 
 func (m *heartBeatAt) resetRetryCount(service Service) {
 	service.SetRetryCount(0)
-	m.serviceTickers[service.GetID()].ticker.Reset(m.runningInterval)
+	if s, ok := m.serviceTickers[service.GetID()]; ok {
+		s.ticker.Reset(m.runningInterval)
+	}
 }
 
 func (m *heartBeatAt) updateServiceStatus(ctx context.Context) {

@@ -1,0 +1,7 @@
+*.md
+*.yml
+.*
+/backend
+docs/
+scripts/
+test/

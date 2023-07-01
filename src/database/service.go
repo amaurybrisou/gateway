@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -12,15 +13,15 @@ import (
 )
 
 const (
-	serviceSelectFields     = "id, name, description, prefix, domain, host, image_url, required_roles"
-	serviceSelectFieldsFull = "id, name, description, prefix, domain, host, image_url, required_roles, pricing_table_key, pricing_table_publishable_key, created_at, updated_at, deleted_at"
-	serviceInsertFields     = "id, name, description, prefix, domain, host, image_url, required_roles, pricing_table_key, pricing_table_publishable_key, created_at"
+	serviceSelectFields     = "id, name, description, prefix, domain, host, image_url, status, required_roles"
+	serviceSelectFieldsFull = "id, name, description, prefix, domain, host, image_url, status, required_roles, pricing_table_key, pricing_table_publishable_key, created_at, updated_at, deleted_at"
+	serviceInsertFields     = "id, name, description, prefix, domain, host, image_url, status, required_roles, pricing_table_key, pricing_table_publishable_key, created_at"
 )
 
 func (d Database) CreateService(ctx context.Context, s models.Service) (models.Service, error) {
 	query := `
 	INSERT INTO service (` + serviceInsertFields + `)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	ON CONFLICT (name) DO UPDATE
 	SET domain = excluded.domain,
 		prefix = excluded.prefix,
@@ -41,6 +42,7 @@ func (d Database) CreateService(ctx context.Context, s models.Service) (models.S
 		s.Domain,
 		s.Host,
 		s.ImageURL,
+		"ADDED",
 		s.RequiredRoles,
 		s.PricingTableKey,
 		s.PricingTablePublishableKey,
@@ -168,6 +170,8 @@ func (d *Database) UpdateServiceStatus(ctx context.Context, serviceID uuid.UUID,
 
 func scanService(row localRow) (models.Service, error) {
 	var service models.Service
+	var nullImage sql.NullString
+
 	err := row.Scan(
 		&service.ID,
 		&service.Name,
@@ -175,17 +179,27 @@ func scanService(row localRow) (models.Service, error) {
 		&service.Prefix,
 		&service.Domain,
 		&service.Host,
-		&service.ImageURL,
+		&nullImage,
+		&service.Status,
 		&service.RequiredRoles,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Service{}, nil
+		}
 		return models.Service{}, fmt.Errorf("failed to scan service row: %w", err)
 	}
+
+	if nullImage.Valid {
+		service.ImageURL = &nullImage.String
+	}
+
 	return service, nil
 }
 
 func scanServiceFull(row localRow) (models.Service, error) {
 	var service models.Service
+	var nullImage sql.NullString
 	err := row.Scan(
 		&service.ID,
 		&service.Name,
@@ -193,7 +207,8 @@ func scanServiceFull(row localRow) (models.Service, error) {
 		&service.Prefix,
 		&service.Domain,
 		&service.Host,
-		&service.ImageURL,
+		&nullImage,
+		&service.Status,
 		&service.RequiredRoles,
 		&service.PricingTableKey,
 		&service.PricingTablePublishableKey,
@@ -202,7 +217,14 @@ func scanServiceFull(row localRow) (models.Service, error) {
 		&service.DeletedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Service{}, nil
+		}
 		return models.Service{}, fmt.Errorf("failed to scan service row: %w", err)
+	}
+
+	if nullImage.Valid {
+		service.ImageURL = &nullImage.String
 	}
 	return service, nil
 }

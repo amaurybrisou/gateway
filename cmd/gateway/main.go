@@ -12,6 +12,7 @@ import (
 	coremodels "github.com/amaurybrisou/gateway/pkg/core/models"
 	"github.com/amaurybrisou/gateway/pkg/core/store"
 	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
+	"github.com/amaurybrisou/gateway/src"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/gwservices"
 	"github.com/amaurybrisou/gateway/src/gwservices/payment"
@@ -22,12 +23,15 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-var (
-	BuildVersion, BuildHash, BuildTime string = "1.0", "localhost", time.Now().String()
-)
-
 func main() {
+	core.Logger()
 	ctx := log.Logger.WithContext(context.Background())
+
+	log.Ctx(ctx).Info().
+		Any("build_version", src.BuildVersion).
+		Any("build_hash", src.BuildHash).
+		Any("build_time", src.BuildTime).
+		Send()
 
 	postgres := store.NewPostgres(ctx,
 		core.LookupEnv("DB_USERNAME", "gateway"),
@@ -64,7 +68,7 @@ func main() {
 
 	r := router(services, db)
 
-	heartbeatInterval, err := time.ParseDuration(core.LookupEnv("HEARTBEAT_INTERVAL", "5s"))
+	heartbeatInterval, err := time.ParseDuration(core.LookupEnv("HEARTBEAT_INTERVAL", "2s"))
 	if err != nil {
 		log.Ctx(ctx).Fatal().Err(err).Send()
 	}
@@ -148,7 +152,9 @@ func router(s gwservices.Services, db *database.Database) http.Handler {
 			adminRouter.Use(coremiddleware.JsonContentType())
 
 			adminRouter.Post("/services", s.Service().CreateServiceHandler)
-			adminRouter.Get("/services", s.Service().DeleteServiceHandler)
+			adminRouter.Delete("/services/{service_id}", s.Service().DeleteServiceHandler)
+			adminRouter.Get("/services", s.Service().GetAllServicesHandler)
+			adminRouter.Get("/version", src.Version)
 		})
 
 		authenticatedRouter.HandleFunc("/*", s.Proxy().ProxyHandler)

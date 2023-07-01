@@ -12,9 +12,9 @@ import (
 	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/database/models"
+	"github.com/amaurybrisou/gateway/src/serializer"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
 )
 
@@ -47,7 +47,7 @@ func (s Service) CreateServiceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(createdService); err != nil {
+	if err := json.NewEncoder(w).Encode(serializer.Service(&createdService)); err != nil {
 		log.Ctx(r.Context()).Err(err).Send()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -55,7 +55,7 @@ func (s Service) CreateServiceHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s Service) DeleteServiceHandler(w http.ResponseWriter, r *http.Request) {
-	serviceID := chi.URLParam(r, "serviceID")
+	serviceID := chi.URLParam(r, "service_id")
 	if serviceID == "" {
 		log.Ctx(r.Context()).Err(errors.New("serviceID missing")).Send()
 		http.Error(w, "serviceID parameter is missing", http.StatusBadRequest)
@@ -99,7 +99,7 @@ func (s Service) GetAllServicesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(services); err != nil {
+	if err := json.NewEncoder(w).Encode(serializer.Services(services)); err != nil {
 		log.Ctx(r.Context()).Err(err).Send()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -107,12 +107,21 @@ func (s Service) GetAllServicesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s Service) ServicePricePage(w http.ResponseWriter, r *http.Request) {
-	serviceName := mux.Vars(r)["service_name"]
+	serviceName := chi.URLParam(r, "service_name")
+	if serviceName == "" {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
 
 	service, err := s.db.GetServiceByName(r.Context(), serviceName)
 	if err != nil {
 		log.Ctx(r.Context()).Err(err).Send()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if service.ID == uuid.Nil {
+		http.Error(w, "service not found", http.StatusNotFound)
 		return
 	}
 

@@ -14,13 +14,14 @@ RUN export "GOOS=$(echo "$TARGETPLATFORM" | cut -d/ -f1)"; \
     export CGO_ENABLED=0; \
     go build \
     -ldflags "-s -w \
-    #   -X 'github.com/brisouamaury/gateway/cmd/gateway/main.BuildVersion=$BUILD_VERSION' \
-    #   -X 'github.com/brisouamaury/gateway/cmd/gateway/main.BuildHash=$BUILD_HASH' \
-    #   -X 'github.com/brisouamaury/gateway/cmd/gateway/main.BuildTime=$BUILD_TIME' \
+    -X 'github.com/amaurybrisou/gateway/src.BuildHash=$BUILD_VERSION' \
+    -X 'github.com/amaurybrisou/gateway/src.BuildHash=$BUILD_HASH' \
+    -X 'github.com/amaurybrisou/gateway/src.BuildTime=$BUILD_TIME' \
     " \
-    -o ./backend .
+    -o ./backend cmd/gateway/main.go
 
-FROM --platform=$TARGETPLATFORM alpine:3.17
+FROM --platform=$TARGETPLATFORM scratch
 
 COPY --from=builder /app/backend /app/backend
+COPY --from=builder /app/migrations /app/migrations
 CMD ["/app/backend"]
