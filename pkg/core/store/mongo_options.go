@@ -33,8 +33,7 @@ func NewMongoClient(ctx context.Context, username, password, addr string, port i
 func (r *MongoClient) start(ctx context.Context) error {
 	log.Ctx(ctx).Info().Msg("start mongo client")
 
-	ctx, cancel := context.WithTimeout(context.Background(),
-		30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(r.addr))

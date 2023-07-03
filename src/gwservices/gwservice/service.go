@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Service struct {
@@ -202,4 +203,40 @@ func (s Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	response := map[string]string{"token": token}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response) //nolint
+}
+
+// PasswordUpdateHandler is an HTTP handler for updating the user password.
+func (s Service) PasswordUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&request)
+	if err != nil {
+		log.Ctx(r.Context()).Error().Err(err).Msg("Invalid request body")
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	cipheredPassword, err := cryptlib.GenerateHash(request.Password, bcrypt.DefaultCost)
+	if err != nil {
+		log.Ctx(r.Context()).Error().Err(err).Msg("cipher password")
+		http.Error(w, "could not cipher password", http.StatusInternalServerError)
+		return
+	}
+
+	user, err := s.db.UpdatePassword(r.Context(), request.Email, cipheredPassword)
+	if err != nil {
+		if errors.Is(err, database.ErrUserNotFound) {
+			log.Ctx(r.Context()).Error().Err(err).Msg("user not found")
+			http.Error(w, "User not found", http.StatusNotFound)
+		} else {
+			log.Ctx(r.Context()).Error().Err(err).Msg("update password")
+			http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	json.NewEncoder(w).Encode(user) //nolint
 }

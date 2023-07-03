@@ -2,6 +2,7 @@ package gwservices
 
 import (
 	"github.com/amaurybrisou/gateway/pkg/core/jwtlib"
+	"github.com/amaurybrisou/gateway/pkg/mailcli"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/gwservices/gwservice"
 	"github.com/amaurybrisou/gateway/src/gwservices/payment"
@@ -37,13 +38,13 @@ type ServiceConfig struct {
 	ProxyConfig   proxy.Config
 }
 
-func NewServices(db *database.Database, cfg ServiceConfig) Services {
+func NewServices(db *database.Database, mail *mailcli.MailClient, cfg ServiceConfig) Services {
 	jwt := jwtlib.New(cfg.JwtConfig)
 
 	return Services{
 		jwt:     jwt,
 		svc:     gwservice.New(db, jwt),
 		proxy:   proxy.New(db, cfg.ProxyConfig),
-		payment: payment.NewService(db, jwt, cfg.PaymentConfig),
+		payment: payment.NewService(db, jwt, mail, cfg.PaymentConfig),
 	}
 }

@@ -33,6 +33,20 @@ func LookupEnvInt(e string, d int) (r int) {
 	return r
 }
 
+func LookupEnvFloat64(e string, d float64) (r float64) {
+	tr := os.Getenv(e)
+	if tr == "" {
+		return d
+	}
+
+	r, err := strconv.ParseFloat(tr, 64)
+	if err != nil {
+		log.Fatal().Err(err).Msg("strconv.Atoi()")
+		return -1
+	}
+	return r
+}
+
 func LookupEnvDuration(e string, d string) (r time.Duration) {
 	tr := os.Getenv(e)
 	if tr == "" && d == "" {

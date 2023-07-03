@@ -36,6 +36,11 @@ func (h *httpServerOption) Start(ctx context.Context) (<-chan struct{}, <-chan e
 			errChan <- err
 			return
 		}
+
+		h.srv.BaseContext = func(l net.Listener) context.Context {
+			return ctx
+		}
+
 		startedChan <- struct{}{}
 
 		if err := h.srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {

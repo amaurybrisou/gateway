@@ -34,7 +34,7 @@ type Service struct {
 	PricingTableKey            string    `json:"pricing_table_key"`
 	PricingTablePublishableKey string    `json:"pricing_table_publishable_key"`
 
-	RetryCount int
+	RetryCount int `json:"-"`
 
 	RequiredRoles []Role     `json:"required_roles"`
 	Status        string     `json:"status"`
@@ -86,6 +86,7 @@ type User struct {
 	Password   string                 `json:"-"`
 	Role       coremodels.GatewayRole `json:"role"`
 	StripeKey  *string                `json:"-"`
+	IsNew      string                 `json:"-"`
 	CreatedAt  time.Time              `json:"created_at"`
 	UpdatedAt  *time.Time             `json:"updated_at"`
 	DeletedAt  *time.Time             `json:"deleted_at"`

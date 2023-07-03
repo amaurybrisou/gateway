@@ -2,7 +2,6 @@ package test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -91,7 +90,7 @@ func (s *DefaultTestSuite) SetupSuite() {
 
 	domain := core.LookupEnv("DOMAIN", "http://localhost:50000")
 
-	services := gwservices.NewServices(s.db, gwservices.ServiceConfig{
+	services := gwservices.NewServices(s.db, nil, gwservices.ServiceConfig{
 		PaymentConfig: payment.Config{
 			StripeKey:           core.LookupEnv("STRIPE_KEY", ""),
 			StripeSuccessURL:    core.LookupEnv("STRIPE_SUCCESS_URL", domain+"/login"),
@@ -110,7 +109,7 @@ func (s *DefaultTestSuite) SetupSuite() {
 		},
 	})
 
-	r := src.Router(services, s.db)
+	r := src.Router(services, s.db, 10, 10)
 
 	lcore := core.New(
 		core.WithMigrate(
@@ -128,23 +127,20 @@ func (s *DefaultTestSuite) SetupSuite() {
 	s.lcore = lcore
 
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
-	startedChan, hasErrorChan := lcore.Start(ctx)
-
-	<-startedChan
+	startedChan, hasErrorChan := s.lcore.Start(ctx)
 
 	go func() {
-		for err := range hasErrorChan {
-			cancel()
-
-			if errors.Is(err, core.ErrSignalReceived) {
-				log.Ctx(ctx).Debug().Caller().Err(err).Msg("closing services...")
-			}
-
-			lcore.Shutdown(ctx)
+		err := <-hasErrorChan
+		if err != nil {
+			log.Ctx(ctx).Debug().Caller().Err(err).Msg("closing services...")
+			s.lcore.Shutdown(ctx)
 		}
+
+		defer cancel()
 	}()
+
+	<-startedChan
 }
 
 func (s *DefaultTestSuite) TearDownSuite() {

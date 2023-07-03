@@ -14,6 +14,7 @@ import (
 	"github.com/amaurybrisou/gateway/pkg/core/cryptlib"
 	"github.com/amaurybrisou/gateway/pkg/core/jwtlib"
 	coremodels "github.com/amaurybrisou/gateway/pkg/core/models"
+	"github.com/amaurybrisou/gateway/pkg/mailcli"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/google/uuid"
@@ -28,6 +29,7 @@ type Service struct {
 	*client.API
 	db            *database.Database
 	jwt           *jwtlib.JWT
+	mailcli       *mailcli.MailClient
 	stripeKey     string
 	successURL    string
 	webHookSecret string
@@ -38,7 +40,7 @@ type Config struct {
 	StripeKey, StripeSuccessURL, StripeCancelURL, StripeWebHookSecret string
 }
 
-func NewService(db *database.Database, jwt *jwtlib.JWT, cfg Config) Service {
+func NewService(db *database.Database, jwt *jwtlib.JWT, mail *mailcli.MailClient, cfg Config) Service {
 	stripe.Key = cfg.StripeKey
 
 	// stripeClient := &client.API{}
@@ -47,6 +49,7 @@ func NewService(db *database.Database, jwt *jwtlib.JWT, cfg Config) Service {
 	return Service{
 		db:            db,
 		jwt:           jwt,
+		mailcli:       mail,
 		stripeKey:     cfg.StripeKey,
 		successURL:    cfg.StripeSuccessURL,
 		cancelURL:     cfg.StripeCancelURL,
@@ -82,7 +85,6 @@ func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) {
 	// https://stripe.com/docs/api/events/types.
 	switch event.Type {
 	case "checkout.session.completed":
-		fmt.Fprintf(os.Stderr, "Unhandled event type: %s\n", event.Type)
 		var session stripe.CheckoutSession
 		err := json.Unmarshal(event.Data.Raw, &session)
 		if err != nil {
@@ -136,7 +138,6 @@ func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) {
 		// Payment is successful and the subscription is created.
 		// You should provision the subscription and save the customer ID to your database.
 	case "customer.subscription.deleted":
-		fmt.Fprintf(os.Stderr, "Unhandled event type: %s\n", event.Type)
 		var sub stripe.Subscription
 		err := json.Unmarshal(event.Data.Raw, &sub)
 		if err != nil {
@@ -267,6 +268,14 @@ func (s Service) RegisterUser(ctx context.Context, session *stripe.CheckoutSessi
 	if err != nil {
 		return u, err
 	}
+
+	go func() {
+		err := s.mailcli.SendPasswordEmail(u.Email, hashedPassword)
+		if err != nil {
+			log.Ctx(ctx).Error().Err(err).Msg("error sending auto generated password email")
+		}
+		log.Ctx(ctx).Debug().Any("email", u.Email).Msg("auto generated pasword email send")
+	}()
 
 	return u, nil
 }

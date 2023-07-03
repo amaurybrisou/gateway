@@ -111,16 +111,29 @@ type healthCheckResult struct {
 func (m *heartBeatAt) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
 	log.Ctx(ctx).Info().Msg("start heartbeat")
 
-	stop := make(chan struct{})
-	go m.updateServiceStatus(ctx, stop)
+	go m.updateServiceStatus(ctx)
 
 	errChan := make(chan error)
 	startedChan := make(chan struct{})
+
+	t := time.NewTicker(m.runningInterval)
+	defer t.Stop()
+
+	loop := func() {
+		services, err := m.fetchservicesFunc(ctx)
+		if err != nil {
+			log.Ctx(ctx).Error().Err(err).Send()
+			return
+		}
+
+		m.updateTickers(ctx, services)
+	}
 
 	go func() {
 		defer close(errChan)
 		defer close(startedChan)
 		defer close(m.done)
+		loop()
 		startedChan <- struct{}{}
 		for {
 			select {
@@ -130,17 +143,9 @@ func (m *heartBeatAt) Start(ctx context.Context) (<-chan struct{}, <-chan error)
 				return
 			case <-m.done:
 				log.Ctx(ctx).Info().Msg("stop heartbeat")
-				close(stop)
 				return
-			default:
-				services, err := m.fetchservicesFunc(ctx)
-				if err != nil {
-					log.Ctx(ctx).Error().Err(err).Send()
-					continue
-				}
-
-				m.updateTickers(ctx, services)
-				<-time.After(m.runningInterval)
+			case <-t.C:
+				loop()
 			}
 		}
 	}()
@@ -197,17 +202,27 @@ func (m *heartBeatAt) runTicker(ctx context.Context, ticker *localTicker) {
 
 	log.Ctx(ctx).Debug().Msgf("service %s created", ticker.service.GetID())
 
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
+	go m.checkServiceHealth(ctx, &wg, ticker)
+	wg.Wait()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.ticker.C:
-			go m.checkServiceHealth(ctx, ticker)
+			wg.Add(1)
+			go m.checkServiceHealth(ctx, &wg, ticker)
+			wg.Wait()
 		}
 	}
 }
 
-func (m *heartBeatAt) checkServiceHealth(ctx context.Context, ticker *localTicker) {
+func (m *heartBeatAt) checkServiceHealth(ctx context.Context, wg *sync.WaitGroup, ticker *localTicker) {
+	defer wg.Done()
+
 	result := healthCheckResult{
 		service: ticker.service,
 		err:     nil,
@@ -256,10 +271,10 @@ func (m *heartBeatAt) resetRetryCount(service Service) {
 	}
 }
 
-func (m *heartBeatAt) updateServiceStatus(ctx context.Context, done chan struct{}) {
+func (m *heartBeatAt) updateServiceStatus(ctx context.Context) {
 	for {
 		select {
-		case <-done:
+		case <-ctx.Done():
 			return
 		case result := <-m.resultsCh:
 			log.Ctx(ctx).Debug().

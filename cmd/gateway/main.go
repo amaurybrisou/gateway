@@ -2,22 +2,34 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/amaurybrisou/gateway/pkg/core"
 	"github.com/amaurybrisou/gateway/pkg/core/jwtlib"
 	"github.com/amaurybrisou/gateway/pkg/core/store"
+	"github.com/amaurybrisou/gateway/pkg/mailcli"
 	"github.com/amaurybrisou/gateway/src"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/gwservices"
 	"github.com/amaurybrisou/gateway/src/gwservices/payment"
 	"github.com/amaurybrisou/gateway/src/gwservices/proxy"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 func main() {
-	core.Logger()
+	loglevel, err := zerolog.ParseLevel(core.LookupEnv("LOG_LEVEL", "debug"))
+	if err != nil {
+		fmt.Println("invalid LOG_LEVEL")
+		os.Exit(1)
+	}
+	zerolog.SetGlobalLevel(loglevel)
+
+	core.Logger(core.LookupEnv("LOG_FORMAT", "json"))
+
 	ctx := log.Logger.WithContext(context.Background())
 
 	defer func() {
@@ -45,7 +57,17 @@ func main() {
 
 	domain := core.LookupEnv("DOMAIN", "http://localhost:8089")
 
-	services := gwservices.NewServices(db, gwservices.ServiceConfig{
+	mail, err := mailcli.NewMailClient(
+		ctx,
+		mailcli.WithMailClientOptionSenderEmail(core.LookupEnv("SENDER_EMAIL", "gateway@gateway.org")),
+		mailcli.WithMailClientOptionSenderPassword(core.LookupEnv("SENDER_PASSWORD", "default-password")),
+	)
+	if err != nil {
+		log.Ctx(ctx).Fatal().Err(err).Msg("creating mail client")
+		return
+	}
+
+	services := gwservices.NewServices(db, mail, gwservices.ServiceConfig{
 		PaymentConfig: payment.Config{
 			StripeKey:           core.LookupEnv("STRIPE_KEY", ""),
 			StripeSuccessURL:    core.LookupEnv("STRIPE_SUCCESS_URL", domain+"/login"),
@@ -64,7 +86,10 @@ func main() {
 		},
 	})
 
-	r := src.Router(services, db)
+	r := src.Router(services, db,
+		core.LookupEnvFloat64("RATE_LIMIT", float64(5)),
+		core.LookupEnvInt("RATE_LIMIT_BURST", 10),
+	)
 
 	lcore := core.New(
 		core.WithMigrate(
@@ -113,7 +138,7 @@ func main() {
 		log.Ctx(ctx).Debug().Msg("all backend services started")
 	}()
 
-	err := <-errChan
+	err = <-errChan
 	if err != nil {
 		log.Ctx(ctx).Error().Err(err).Msg("shutting down")
 		lcore.Shutdown(ctx)

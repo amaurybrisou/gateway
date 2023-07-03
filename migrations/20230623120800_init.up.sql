@@ -12,6 +12,7 @@ CREATE TABLE "user" (
     "password" TEXT NOT NULL,
     "role" TEXT NOT NULL DEFAULT 'USER',
     "stripe_key" TEXT,
+    "is_new" BOOLEAN default true,
     "created_at" TIMESTAMP DEFAULT NOW() NOT NULL,
     "updated_at" TIMESTAMP DEFAULT NOW(),
     "deleted_at" TIMESTAMP

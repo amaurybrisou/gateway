@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -41,7 +40,7 @@ func (l *StructuredLoggerEntry) Panic(v interface{}, stack []byte) {
 		Str("panic", fmt.Sprintf("%+v", v)).Send()
 }
 
-func Logger() middleware.LogFormatter {
+func Logger(logFormat string) {
 	zerolog.CallerMarshalFunc = func(_ uintptr, file string, line int) string {
 		short := file
 		for i := len(file) - 1; i > 0; i-- {
@@ -58,13 +57,12 @@ func Logger() middleware.LogFormatter {
 	zerolog.MessageFieldName = "msg"
 	zerolog.CallerFieldName = "caller"
 
-	log.Logger = zerolog.New(os.Stderr).With().Caller().Timestamp().Logger()
+	log.Logger = log.With().Caller().Timestamp().Logger()
 
-	return logFormatter{}
-}
-
-type logFormatter struct{}
-
-func (l logFormatter) NewLogEntry(r *http.Request) middleware.LogEntry {
-	return &StructuredLoggerEntry{}
+	switch logFormat {
+	case "json":
+		log.Logger = log.Output(os.Stderr)
+	case "console":
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339})
+	}
 }

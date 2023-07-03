@@ -138,7 +138,7 @@ var (
 
 func (d *Database) GetUserByEmail(ctx context.Context, email string) (models.User, error) {
 	row := d.db.QueryRow(ctx, `SELECT `+userSelectFields+`, password FROM "user" WHERE email = $1 AND deleted_at IS NULL`, email)
-	user, err := scanUserWitPassword(row)
+	user, err := scanUserWithPassword(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return user, ErrUserNotFound
@@ -149,7 +149,26 @@ func (d *Database) GetUserByEmail(ctx context.Context, email string) (models.Use
 	return user, nil
 }
 
-func scanUserWitPassword(row localRow) (u models.User, err error) {
+// UpdatePassword set the password and is_new to false, update_at = now and return the user.
+func (d *Database) UpdatePassword(ctx context.Context, email, password string) (models.User, error) {
+	var user models.User
+
+	row := d.db.QueryRow(ctx, `
+		UPDATE "user" SET password = $2, is_new = false, updated_at = now()
+		WHERE email = $1 AND deleted_at IS NULL
+		RETURNING `+userSelectFieldsFull, email, password)
+	user, err := scanUserFull(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return user, ErrUserNotFound
+		}
+		return user, err
+	}
+
+	return user, nil
+}
+
+func scanUserWithPassword(row localRow) (u models.User, err error) {
 	err = row.Scan(
 		&u.ID,
 		&u.ExternalID,
