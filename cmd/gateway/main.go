@@ -102,6 +102,7 @@ func main() {
 			core.LookupEnvInt("HTTP_SERVER_PORT", 8089),
 			r,
 		),
+		core.WithSignals(),
 		core.WithPrometheus(
 			core.LookupEnv("HTTP_PROM_ADDR", "0.0.0.0"),
 			core.LookupEnvInt("HTTP_PROM_PORT", 2112),

@@ -8,11 +8,12 @@ import (
 )
 
 type heartbeatOption struct {
-	i time.Duration
+	i    time.Duration
+	done chan struct{}
 }
 
 func WithHeartBeat(i time.Duration) Options {
-	tmp := &heartbeatOption{i: i}
+	tmp := &heartbeatOption{i: i, done: make(chan struct{})}
 	return tmp
 }
 
@@ -32,6 +33,8 @@ func (h *heartbeatOption) Start(ctx context.Context) (<-chan struct{}, <-chan er
 		startedChan <- struct{}{}
 		for {
 			select {
+			case <-h.done:
+				return
 			case <-ctx.Done():
 				log.Ctx(ctx).Debug().Caller().Msg("closing heartbeat")
 				errChan <- ctx.Err()
@@ -48,5 +51,6 @@ func (h *heartbeatOption) Start(ctx context.Context) (<-chan struct{}, <-chan er
 }
 
 func (h *heartbeatOption) Stop(ctx context.Context) error {
+	close(h.done)
 	return nil
 }

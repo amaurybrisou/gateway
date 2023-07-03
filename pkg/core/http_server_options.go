@@ -18,7 +18,6 @@ type httpServerOption struct {
 
 func (h *httpServerOption) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
 	errChan := make(chan error)
-
 	startedChan := make(chan struct{})
 
 	go func() {

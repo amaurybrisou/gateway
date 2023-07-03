@@ -94,7 +94,7 @@ func HeartBeat(options ...ManagementLoopOption) Options {
 
 // Stop the loop.
 func (m *heartBeatAt) Stop(ctx context.Context) error {
-	m.done <- struct{}{}
+	close(m.done)
 	return nil
 }
 
@@ -132,7 +132,6 @@ func (m *heartBeatAt) Start(ctx context.Context) (<-chan struct{}, <-chan error)
 	go func() {
 		defer close(errChan)
 		defer close(startedChan)
-		defer close(m.done)
 		loop()
 		startedChan <- struct{}{}
 		for {

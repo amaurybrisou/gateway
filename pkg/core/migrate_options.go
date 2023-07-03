@@ -24,7 +24,6 @@ func (m Migrate) New(c *Core) {
 
 func (m Migrate) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
 	errChan := make(chan error)
-
 	startedChan := make(chan struct{})
 
 	go func() {

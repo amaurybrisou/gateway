@@ -3,11 +3,7 @@ package core
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -19,6 +15,7 @@ type stopFuncType func(context.Context) error
 type Core struct {
 	startFuncs []startFuncType
 	stopFuncs  []stopFuncType
+	cleanup    func()
 }
 
 func New(opts ...Options) *Core {
@@ -32,7 +29,7 @@ func New(opts ...Options) *Core {
 }
 
 func hasServiceStarted(ctx context.Context, expectedStart int, startedChans <-chan <-chan struct{}) <-chan struct{} {
-	startChan := aggChan[struct{}](startedChans)
+	startChan := aggChan[struct{}](ctx, startedChans)
 	done := make(chan struct{}, 1)
 
 	go func() {
@@ -55,14 +52,17 @@ func hasServiceStarted(ctx context.Context, expectedStart int, startedChans <-ch
 }
 
 func hasServiceErrors(ctx context.Context, errChans <-chan <-chan error) <-chan error {
-	errChan := aggChan[error](errChans)
+	errChan := aggChan[error](ctx, errChans)
 	errorEncountered := make(chan error, 1)
 
 	go func() {
 		defer close(errorEncountered)
 		for {
 			select {
-			case err := <-errChan:
+			case err, ok := <-errChan:
+				if !ok {
+					return
+				}
 				if err != nil {
 					// log.Ctx(ctx).Debug().Msg("error starting")
 					errorEncountered <- err
@@ -85,19 +85,13 @@ func hasServiceErrors(ctx context.Context, errChans <-chan <-chan error) <-chan 
 func (c *Core) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
 	log.Ctx(ctx).Info().Msg("starting backend")
 
-	c.startFuncs = append(c.startFuncs, WithSignals)
-
 	startedChans := make(chan (<-chan struct{}), len(c.startFuncs))
 	errChans := make(chan (<-chan error))
-
-	ctx = log.Logger.WithContext(ctx)
 
 	allStarted := hasServiceStarted(ctx, len(c.startFuncs), startedChans)
 	hasErrorChan := hasServiceErrors(ctx, errChans)
 
 	for _, sf := range c.startFuncs {
-		// defer close(startedChans)
-		// defer close(errChans)
 		go func(f startFuncType) {
 			started, err := f(ctx)
 			errChans <- err
@@ -105,17 +99,12 @@ func (c *Core) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
 		}(sf)
 	}
 
-	// return func() (<-chan struct{}, <-chan error) {
-	// 	started := make(chan struct{})
-
-	// 	go func() {
-	// 		<-allStarted
-	// 		log.Ctx(ctx).Debug().Msg("all backend services started")
-	// 		started <- struct{}{}
-	// 	}()
+	c.cleanup = func() {
+		close(startedChans)
+		close(errChans)
+	}
 
 	return allStarted, hasErrorChan
-	// }
 }
 
 func (c *Core) Shutdown(ctx context.Context) {
@@ -133,55 +122,46 @@ func (c *Core) Shutdown(ctx context.Context) {
 	}
 
 	wg.Wait()
+
+	if c.cleanup != nil {
+		c.cleanup()
+	}
 }
 
 var ErrSignalReceived = errors.New("signal received")
 
-func WithSignals(ctx context.Context) (<-chan struct{}, <-chan error) {
-	sigc := make(chan os.Signal, 1)
-
-	signal.Notify(sigc,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-		syscall.SIGQUIT,
-	)
-
-	errChan := make(chan error)
-	startedChan := make(chan struct{})
-	go func() {
-		defer close(startedChan)
-		startedChan <- struct{}{}
-		select {
-		case <-ctx.Done():
-			errChan <- nil
-		case s := <-sigc:
-			errChan <- fmt.Errorf("%s %w", s, ErrSignalReceived)
-			close(errChan)
-		}
-	}()
-
-	return startedChan, errChan
-}
-
-func aggChan[T any](chans <-chan (<-chan T)) <-chan T {
+func aggChan[T any](ctx context.Context, chans <-chan (<-chan T)) <-chan T {
 	var wg sync.WaitGroup
 
 	outputChan := make(chan T)
 	out := func(cc <-chan T) {
-		for c := range cc {
+		defer wg.Done()
+		select {
+		case c, ok := <-cc: // cc must be closed explicitly by its creator.
+			if !ok {
+				return
+			}
 			outputChan <- c
+		case <-ctx.Done():
+			return
 		}
-		wg.Done()
 	}
 
 	wg.Add(1)
 	go func() {
-		for s := range chans {
-			wg.Add(1)
-			go out(s)
+		defer wg.Done()
+		for {
+			select {
+			case s, ok := <-chans:
+				if !ok {
+					return
+				}
+				wg.Add(1)
+				go out(s)
+			case <-ctx.Done():
+				return
+			}
 		}
-		wg.Done()
 	}()
 
 	go func() {
