@@ -21,17 +21,21 @@ type SocketServerOption struct {
 	ReadDeadline, WriteDeadline time.Duration
 }
 
-func (o *SocketServerOption) New(c *core) {
+func (o *SocketServerOption) New(c *Core) {
 	c.startFuncs = append(c.startFuncs, o.Start)
 	c.stopFuncs = append(c.stopFuncs, o.Stop)
 }
 
-func (o *SocketServerOption) Start(ctx context.Context) error {
+func (o *SocketServerOption) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
+	errChan := make(chan error)
+
+	startedChan := make(chan struct{})
+
 	var lc net.ListenConfig
 	fd, err := lc.Listen(ctx, o.proto, fmt.Sprintf("%s:%d", o.addr, o.port))
 	if err != nil {
 		log.Ctx(ctx).Error().Err(err).Send()
-		return err
+		errChan <- err
 	}
 
 	log.Ctx(ctx).Info().
@@ -40,17 +44,21 @@ func (o *SocketServerOption) Start(ctx context.Context) error {
 
 	o.fd = fd
 
-	return func() error {
+	go func() {
+		defer close(errChan)
+		defer close(startedChan)
 		defer fd.Close()
 		for {
 			conn, err := fd.Accept()
 			if errors.Is(err, net.ErrClosed) {
-				return nil
+				errChan <- nil
+				return
 			}
 
 			if err != nil {
 				log.Ctx(ctx).Error().Err(err).Send()
-				return err
+				errChan <- err
+				return
 			}
 
 			ctx = log.With().
@@ -64,12 +72,17 @@ func (o *SocketServerOption) Start(ctx context.Context) error {
 
 			if err := conn.SetReadDeadline(time.Now().Add(o.ReadDeadline)); err != nil {
 				log.Ctx(ctx).Error().Err(err).Msg("conn.SetReadDeadline()")
-				return err
+				errChan <- err
+				return
 			}
+
+			startedChan <- struct{}{}
 
 			go o.h(ctx, conn)
 		}
 	}()
+
+	return startedChan, errChan
 }
 
 func (o *SocketServerOption) Stop(ctx context.Context) error {

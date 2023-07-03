@@ -18,7 +18,7 @@ func WithLogLevel(level string) Options {
 	return &logLevelOption{Level: level}
 }
 
-func (i *logLevelOption) New(c *core) {
+func (i *logLevelOption) New(c *Core) {
 	l, err := zerolog.ParseLevel(i.Level)
 	if err != nil {
 		log.Fatal().Err(err).Msg("could not parse log level")
@@ -27,11 +27,16 @@ func (i *logLevelOption) New(c *core) {
 	zerolog.SetGlobalLevel(l)
 }
 
-func (i *logLevelOption) Start(ctx context.Context) error {
+func (i *logLevelOption) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
+	startedChan := make(chan struct{})
+	defer close(startedChan)
+
 	if i.Output != nil {
 		log.Logger = log.Logger.Output(i.Output)
 	}
-	return nil
+	startedChan <- struct{}{}
+
+	return startedChan, nil
 }
 
 func (i *logLevelOption) Stop(ctx context.Context) error {

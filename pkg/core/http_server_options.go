@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -15,19 +16,35 @@ type httpServerOption struct {
 	srv http.Server
 }
 
-func (h *httpServerOption) Start(ctx context.Context) error {
-	return func() error {
+func (h *httpServerOption) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
+	errChan := make(chan error)
+
+	startedChan := make(chan struct{})
+
+	go func() {
+		defer close(errChan)
+		defer close(startedChan)
+
 		log.Ctx(ctx).Info().
 			Str("address", h.srv.Addr).
 			Bool("tls_enabled", h.srv.TLSConfig != nil).
 			Msg("start http server")
-		err := h.srv.ListenAndServe()
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+
+		l, err := net.Listen("tcp", h.srv.Addr)
+		if err != nil {
 			log.Ctx(ctx).Error().Err(err).Send()
-			return err
+			errChan <- err
+			return
 		}
-		return nil
+		startedChan <- struct{}{}
+
+		if err := h.srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Ctx(ctx).Error().Err(err).Send()
+			errChan <- err
+		}
 	}()
+
+	return startedChan, errChan
 }
 
 func (h *httpServerOption) Stop(ctx context.Context) error {
@@ -35,7 +52,7 @@ func (h *httpServerOption) Stop(ctx context.Context) error {
 	return h.srv.Close()
 }
 
-func (h *httpServerOption) New(c *core) {
+func (h *httpServerOption) New(c *Core) {
 	c.startFuncs = append(c.startFuncs, h.Start)
 	c.stopFuncs = append(c.stopFuncs, h.Stop)
 }

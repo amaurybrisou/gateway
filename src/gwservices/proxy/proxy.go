@@ -9,6 +9,7 @@ import (
 
 	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
 	"github.com/amaurybrisou/gateway/src/database"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
@@ -78,6 +79,8 @@ func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 			pr.Out.URL.Scheme = targetURL.Scheme
 			pr.Out.URL.Host = targetURL.Host
 			pr.Out.URL.Path = singleJoiningSlash(targetURL.Path, pathPrefix)
+			pr.Out.Header.Add("X-Request-Id", middleware.GetReqID(pr.In.Context()))
+			pr.Out.Header.Add("X-Forwarded-For", pr.In.RemoteAddr)
 			pr.Out.Host = targetURL.Host
 		},
 	}

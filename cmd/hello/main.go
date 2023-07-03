@@ -31,20 +31,23 @@ func main() {
 	wg.Add(1)
 	go func() {
 		fmt.Println("Server listening on localhost:8091")
-		log.Fatal(http.ListenAndServe("localhost:8091", router1)) //nolint
+		log.Fatal(http.ListenAndServe(":8091", router1)) //nolint
 		wg.Done()
 	}()
 
 	router2 := http.NewServeMux()
-	router2.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
+	router2.HandleFunc("/hello", helloHandler)
+	router2.HandleFunc("/hc", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(time.Second * 4)
-		helloHandler(w, r)
+		fmt.Println("request received", r.Header, r.Host, r.RequestURI)
+		w.WriteHeader(200)
+		w.Write(nil) //nolint
 	})
 
 	wg.Add(1)
 	go func() {
-		fmt.Println("Server listening on localhost:8092")
-		log.Fatal(http.ListenAndServe("localhost:8092", router2)) //nolint
+		fmt.Println("Server listening on :8092")
+		log.Fatal(http.ListenAndServe(":8092", router2)) //nolint
 		wg.Done()
 	}()
 
@@ -52,6 +55,6 @@ func main() {
 }
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("request received %#v\n", r.Header)
+	fmt.Println("request received", r.Header, r.Host, r.RequestURI)
 	fmt.Fprintf(w, "Hello, World!\n")
 }

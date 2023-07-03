@@ -72,7 +72,7 @@ func WithUpdateServiceStatusFunction(f func(context.Context, uuid.UUID, string) 
 	}
 }
 
-func (h *heartBeatAt) New(c *core) {
+func (h *heartBeatAt) New(c *Core) {
 	c.startFuncs = append(c.startFuncs, h.Start)
 	c.stopFuncs = append(c.stopFuncs, h.Stop)
 }
@@ -80,7 +80,7 @@ func (h *heartBeatAt) New(c *core) {
 func HeartBeat(options ...ManagementLoopOption) Options {
 	m := &heartBeatAt{
 		httpCli:        &http.Client{},
-		done:           make(chan struct{}, 1),
+		done:           make(chan struct{}),
 		resultsCh:      make(chan healthCheckResult),
 		serviceTickers: make(map[uuid.UUID]*localTicker),
 	}
@@ -108,28 +108,44 @@ type healthCheckResult struct {
 	err     error
 }
 
-func (m *heartBeatAt) Start(ctx context.Context) error {
-	log.Ctx(ctx).Info().Msg("start loop management")
-	go m.updateServiceStatus(ctx)
+func (m *heartBeatAt) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
+	log.Ctx(ctx).Info().Msg("start heartbeat")
 
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-m.done:
-			log.Ctx(ctx).Info().Msg("closing loop management")
-			return nil
-		default:
-			<-time.After(m.runningInterval)
-			services, err := m.fetchservicesFunc(ctx)
-			if err != nil {
-				log.Ctx(ctx).Error().Err(err).Send()
-				continue
+	stop := make(chan struct{})
+	go m.updateServiceStatus(ctx, stop)
+
+	errChan := make(chan error)
+	startedChan := make(chan struct{})
+
+	go func() {
+		defer close(errChan)
+		defer close(startedChan)
+		defer close(m.done)
+		startedChan <- struct{}{}
+		for {
+			select {
+			case <-ctx.Done():
+				log.Ctx(ctx).Info().Msg("stop heartbeat")
+				errChan <- ctx.Err()
+				return
+			case <-m.done:
+				log.Ctx(ctx).Info().Msg("stop heartbeat")
+				close(stop)
+				return
+			default:
+				services, err := m.fetchservicesFunc(ctx)
+				if err != nil {
+					log.Ctx(ctx).Error().Err(err).Send()
+					continue
+				}
+
+				m.updateTickers(ctx, services)
+				<-time.After(m.runningInterval)
 			}
-
-			m.updateTickers(ctx, services)
 		}
-	}
+	}()
+
+	return startedChan, errChan
 }
 
 func (m *heartBeatAt) updateTickers(ctx context.Context, services []Service) {
@@ -224,6 +240,7 @@ func (m *heartBeatAt) checkServiceHealth(ctx context.Context, ticker *localTicke
 	m.resetRetryCount(ticker.service)
 	m.resultsCh <- result
 }
+
 func (m *heartBeatAt) updateRetryCount(service Service) {
 	retryCount := service.GetRetryCount() + 5
 	service.SetRetryCount(retryCount)
@@ -239,15 +256,20 @@ func (m *heartBeatAt) resetRetryCount(service Service) {
 	}
 }
 
-func (m *heartBeatAt) updateServiceStatus(ctx context.Context) {
-	for result := range m.resultsCh {
-		log.Ctx(ctx).Debug().
-			Any("service_id", result.service.GetID()).
-			Any("service_status", result.service.GetStatus()).
-			Send()
-		err := m.updateServiceStatusFunc(ctx, result.service.GetID(), result.service.GetStatus())
-		if err != nil {
-			log.Ctx(ctx).Error().Err(err).Send()
+func (m *heartBeatAt) updateServiceStatus(ctx context.Context, done chan struct{}) {
+	for {
+		select {
+		case <-done:
+			return
+		case result := <-m.resultsCh:
+			log.Ctx(ctx).Debug().
+				Any("service_id", result.service.GetID()).
+				Any("service_status", result.service.GetStatus()).
+				Send()
+			err := m.updateServiceStatusFunc(ctx, result.service.GetID(), result.service.GetStatus())
+			if err != nil {
+				log.Ctx(ctx).Error().Err(err).Send()
+			}
 		}
 	}
 }

@@ -5,8 +5,8 @@ import (
 )
 
 type Options interface {
-	New(c *core)
-	Start(context.Context) error
+	New(c *Core)
+	Start(context.Context) (<-chan struct{}, <-chan error)
 	Stop(context.Context) error
 }
 

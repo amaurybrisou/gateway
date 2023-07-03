@@ -2,23 +2,16 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/amaurybrisou/gateway/pkg/core"
 	"github.com/amaurybrisou/gateway/pkg/core/jwtlib"
-	coremodels "github.com/amaurybrisou/gateway/pkg/core/models"
 	"github.com/amaurybrisou/gateway/pkg/core/store"
-	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
 	"github.com/amaurybrisou/gateway/src"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/gwservices"
 	"github.com/amaurybrisou/gateway/src/gwservices/payment"
 	"github.com/amaurybrisou/gateway/src/gwservices/proxy"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
@@ -26,6 +19,12 @@ import (
 func main() {
 	core.Logger()
 	ctx := log.Logger.WithContext(context.Background())
+
+	defer func() {
+		if r := recover(); r != nil {
+			log.Ctx(ctx).Info().Any("recover", r).Send()
+		}
+	}()
 
 	log.Ctx(ctx).Info().
 		Any("build_version", src.BuildVersion).
@@ -46,12 +45,11 @@ func main() {
 
 	domain := core.LookupEnv("DOMAIN", "http://localhost:8089")
 
-	// google.New(
 	services := gwservices.NewServices(db, gwservices.ServiceConfig{
 		PaymentConfig: payment.Config{
 			StripeKey:           core.LookupEnv("STRIPE_KEY", ""),
-			StripeSuccessURL:    core.LookupEnv("STRIPE_SUCCESS_URL", "http://localhost:8089/login"),
-			StripeCancelURL:     core.LookupEnv("STRIPE_CANCEL_URL", "http://localhost:8089"),
+			StripeSuccessURL:    core.LookupEnv("STRIPE_SUCCESS_URL", domain+"/login"),
+			StripeCancelURL:     core.LookupEnv("STRIPE_CANCEL_URL", domain),
 			StripeWebHookSecret: core.LookupEnv("STRIPE_WEBHOOK_SECRET", ""),
 		},
 		JwtConfig: jwtlib.Config{
@@ -66,20 +64,9 @@ func main() {
 		},
 	})
 
-	r := router(services, db)
+	r := src.Router(services, db)
 
-	heartbeatInterval, err := time.ParseDuration(core.LookupEnv("HEARTBEAT_INTERVAL", "2s"))
-	if err != nil {
-		log.Ctx(ctx).Fatal().Err(err).Send()
-	}
-
-	heartbeatErrorIncrement, err := time.ParseDuration(core.LookupEnv("HEARTBEAT_ERROR_INCREMENT", "5s"))
-	if err != nil {
-		log.Ctx(ctx).Fatal().Err(err).Send()
-	}
-
-	err = core.Run(
-		ctx,
+	lcore := core.New(
 		core.WithMigrate(
 			core.LookupEnv("DB_MIGRATIONS_PATH", "file://migrations"),
 			postgres.Config().ConnString(),
@@ -95,10 +82,10 @@ func main() {
 			core.LookupEnvInt("HTTP_PROM_PORT", 2112),
 		),
 		core.HeartBeat(
-			core.WithRequestPath("/healthcheck"),
+			core.WithRequestPath("/hc"),
 			core.WithClientTimeout(5*time.Second),
-			core.WithInterval(heartbeatInterval),
-			core.WithErrorIncrement(heartbeatErrorIncrement),
+			core.WithInterval(core.LookupEnvDuration("HEARTBEAT_INTERVAL", "10s")),
+			core.WithErrorIncrement(core.LookupEnvDuration("HEARTBEAT_ERROR_INCREMENT", "5s")),
 			core.WithFetchServiceFunction(func(ctx context.Context) ([]core.Service, error) {
 				services, err := db.GetServices(ctx)
 				if err != nil {
@@ -116,62 +103,22 @@ func main() {
 		),
 	)
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	started, errChan := lcore.Start(ctx)
+
+	go func() {
+		<-started
+		log.Ctx(ctx).Debug().Msg("all backend services started")
+	}()
+
+	err := <-errChan
 	if err != nil {
-		log.Ctx(ctx).Fatal().Err(err).Msg("shutting down")
-	}
-}
-
-func router(s gwservices.Services, db *database.Database) http.Handler {
-	r := chi.NewRouter()
-
-	r.Use(coremiddleware.NewRateLimitMiddleware(coremiddleware.WithRateLimit(5, 10)).Middleware)
-	r.Use(coremiddleware.RequestMetric("gateway"))
-	r.Use(middleware.RealIP)
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RequestLogger(core.Logger()))
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(time.Second * 10))
-
-	// UNAUTHENTICATED
-	// r.HandleFunc("/", rootHandler(db))
-	r.Post("/login", s.Service().LoginHandler)
-	r.Post("/payment/webhook", s.Payment().StripeWebhook)
-	r.With(coremiddleware.JsonContentType()).Get("/services", s.Service().GetAllServicesHandler)
-	r.Get("/pricing/{service_name}", s.Service().ServicePricePage)
-
-	// AUTHENTICATED
-	authMiddleware := coremiddleware.NewAuthMiddleware(s.Jwt(), func(ctx context.Context, id uuid.UUID) (coremodels.UserInterface, error) {
-		return db.GetUserByID(ctx, id)
-	})
-
-	r.Route("/auth", func(authenticatedRouter chi.Router) {
-		authenticatedRouter.Use(authMiddleware.JWTAuth)
-
-		authenticatedRouter.Route("/admin", func(adminRouter chi.Router) {
-			adminRouter.Use(authMiddleware.IsAdmin)
-			adminRouter.Use(coremiddleware.JsonContentType())
-
-			adminRouter.Post("/services", s.Service().CreateServiceHandler)
-			adminRouter.Delete("/services/{service_id}", s.Service().DeleteServiceHandler)
-			adminRouter.Get("/services", s.Service().GetAllServicesHandler)
-			adminRouter.Get("/version", src.Version)
-		})
-
-		authenticatedRouter.HandleFunc("/*", s.Proxy().ProxyHandler)
-	})
-
-	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
-		route = strings.Replace(route, "/*/", "/", -1)
-		log.Debug().
-			Any("method", method).
-			Any("route", route).
-			Send()
-		return nil
+		log.Ctx(ctx).Error().Err(err).Msg("shutting down")
+		lcore.Shutdown(ctx)
+		log.Ctx(ctx).Debug().Msg("services stopped")
 	}
 
-	if err := chi.Walk(r, walkFunc); err != nil {
-		fmt.Printf("Logging err: %s\n", err.Error())
-	}
-
-	return r
+	log.Ctx(ctx).Debug().Msg("shutdown")
 }

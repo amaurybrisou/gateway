@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 )
@@ -28,6 +29,21 @@ func LookupEnvInt(e string, d int) (r int) {
 	if err != nil {
 		log.Fatal().Err(err).Msg("strconv.Atoi()")
 		return -1
+	}
+	return r
+}
+
+func LookupEnvDuration(e string, d string) (r time.Duration) {
+	tr := os.Getenv(e)
+	if tr == "" && d == "" {
+		log.Fatal().Err(fmt.Errorf("key %s: duration is empty", e))
+	}
+
+	tr = d
+
+	r, err := time.ParseDuration(tr)
+	if err != nil {
+		log.Fatal().Err(fmt.Errorf("key %s: parsing duration", tr))
 	}
 	return r
 }

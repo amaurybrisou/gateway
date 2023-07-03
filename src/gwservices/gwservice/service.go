@@ -186,7 +186,7 @@ func (s Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 	if user.ID == uuid.Nil || !cryptlib.ValidateHash(creds.Password, user.Password) {
 		log.Ctx(r.Context()).Error().Err(err).Msg("invalid credentials")
-		http.Error(w, "invalid credentials", http.StatusForbidden)
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
