@@ -117,7 +117,6 @@ func (m *heartBeatAt) Start(ctx context.Context) (<-chan struct{}, <-chan error)
 	startedChan := make(chan struct{})
 
 	t := time.NewTicker(m.runningInterval)
-	defer t.Stop()
 
 	loop := func() {
 		services, err := m.fetchservicesFunc(ctx)
@@ -132,6 +131,7 @@ func (m *heartBeatAt) Start(ctx context.Context) (<-chan struct{}, <-chan error)
 	go func() {
 		defer close(errChan)
 		defer close(startedChan)
+		defer t.Stop()
 		loop()
 		startedChan <- struct{}{}
 		for {
@@ -170,6 +170,7 @@ func (m *heartBeatAt) updateTickers(ctx context.Context, services []Service) {
 	for _, ticker := range serviceTickers {
 		service, ok := servicesMap[ticker.service.GetID()]
 		if !ok {
+			log.Ctx(ctx).Debug().Msgf("service %s ticker stop", ticker.service.GetID())
 			ticker.ticker.Stop()
 			continue
 		}

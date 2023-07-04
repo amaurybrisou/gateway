@@ -10,20 +10,20 @@ import (
 	"github.com/lib/pq"
 )
 
-func (d Database) HasRole(ctx context.Context, id uuid.UUID, roles ...models.Role) (bool, error) {
+func (d Database) HasRole(ctx context.Context, userID uuid.UUID, roles ...models.Role) (bool, error) {
 	query := `
-		SELECT EXISTS (
-			SELECT 1
-			FROM user_role
-			WHERE user_id = $1 
-			AND (
-				(role = ANY($2) AND (expires_at IS NULL OR expires_at > now()) AND deleted_at IS NULL) OR
-				($2 = '{}')
-			)
-		)`
+	SELECT EXISTS (
+		SELECT 1
+		FROM "user" u
+		LEFT JOIN "user_role" ur ON u.id = ur.user_id
+		WHERE ($2 = '{}') OR
+		(
+		  (user_id = $1) AND 
+		  (u.role IN($2) AND (expires_at IS NULL OR expires_at > now()) AND u.deleted_at IS NULL)) 
+	  )`
 
 	var hasRole bool
-	err := d.db.QueryRow(ctx, query, id, pq.Array(roles)).Scan(&hasRole)
+	err := d.db.QueryRow(ctx, query, userID, pq.Array(roles)).Scan(&hasRole)
 	if err != nil {
 		return false, fmt.Errorf("failed to check user role: %w", err)
 	}

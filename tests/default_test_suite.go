@@ -134,7 +134,7 @@ func (s *DefaultTestSuite) SetupSuite() {
 		err := <-hasErrorChan
 		if err != nil {
 			log.Ctx(ctx).Debug().Caller().Err(err).Msg("closing services...")
-			s.lcore.Shutdown(ctx)
+			s.lcore.Shutdown(ctx) //nolint
 		}
 
 		defer cancel()
@@ -145,7 +145,7 @@ func (s *DefaultTestSuite) SetupSuite() {
 
 func (s *DefaultTestSuite) TearDownSuite() {
 	ctx := log.Logger.WithContext(context.Background())
-	s.lcore.Shutdown(ctx)
+	s.lcore.Shutdown(ctx) //nolint
 	// Stop the database container and clean up resources.
 	err := s.Container.Purge(s.Container.Resource)
 	assert.NoError(s.T(), err)

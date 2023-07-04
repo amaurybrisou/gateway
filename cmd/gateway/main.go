@@ -109,7 +109,7 @@ func main() {
 			core.LookupEnvInt("HTTP_PROM_PORT", 2112),
 		),
 		core.HeartBeat(
-			core.WithRequestPath("/hc"),
+			core.WithRequestPath("/healthcheck"),
 			core.WithClientTimeout(5*time.Second),
 			core.WithInterval(core.LookupEnvDuration("HEARTBEAT_INTERVAL", "10s")),
 			core.WithErrorIncrement(core.LookupEnvDuration("HEARTBEAT_ERROR_INCREMENT", "5s")),

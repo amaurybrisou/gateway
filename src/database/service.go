@@ -10,6 +10,7 @@ import (
 	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/lib/pq"
 )
 
 const (
@@ -43,7 +44,7 @@ func (d Database) CreateService(ctx context.Context, s models.Service) (models.S
 		s.Host,
 		s.ImageURL,
 		"ADDED",
-		s.RequiredRoles,
+		pq.Array(s.RequiredRoles),
 		s.PricingTableKey,
 		s.PricingTablePublishableKey,
 		time.Now(),

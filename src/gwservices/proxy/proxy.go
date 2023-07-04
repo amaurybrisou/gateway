@@ -74,11 +74,18 @@ func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	trim, err := url.JoinPath(s.stripPrefix, pathPrefix)
+	if err != nil {
+		log.Ctx(r.Context()).Error().Err(err).Msg("Failed to parse backend URL")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.Out.URL.Scheme = targetURL.Scheme
 			pr.Out.URL.Host = targetURL.Host
-			pr.Out.URL.Path = singleJoiningSlash(targetURL.Path, pathPrefix)
+			pr.Out.URL.Path = strings.TrimPrefix(pr.Out.URL.Path, trim)
 			pr.Out.Header.Add("X-Request-Id", middleware.GetReqID(pr.In.Context()))
 			pr.Out.Header.Add("X-Forwarded-For", pr.In.RemoteAddr)
 			pr.Out.Host = targetURL.Host
@@ -92,17 +99,4 @@ func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 func (p Proxy) extractPathPrefix(path string) string {
 	path = strings.Split(strings.TrimPrefix(path, p.stripPrefix), "/")[1] // Assuming the path has a leading slash
 	return "/" + strings.Split(path, "/")[0]
-}
-
-// Helper function to join URL paths with a single slash.
-func singleJoiningSlash(a, b string) string {
-	aslash := strings.HasSuffix(a, "/")
-	bslash := strings.HasPrefix(b, "/")
-	switch {
-	case aslash && bslash:
-		return a + b[1:]
-	case !aslash && !bslash:
-		return a + "/" + b
-	}
-	return a + b
 }
