@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -141,8 +142,13 @@ func main() {
 
 	err = <-errChan
 	if err != nil {
-		log.Ctx(ctx).Error().Err(err).Msg("shutting down")
-		lcore.Shutdown(ctx)
+		if !errors.Is(err, core.ErrSignalReceived) {
+			log.Ctx(ctx).Error().Err(err).Msg("error received")
+		}
+		err = lcore.Shutdown(ctx)
+		if err != nil {
+			log.Ctx(ctx).Error().Err(err).Msg("shutdown error received")
+		}
 		log.Ctx(ctx).Debug().Msg("services stopped")
 	}
 

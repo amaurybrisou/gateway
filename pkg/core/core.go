@@ -18,6 +18,14 @@ type Core struct {
 	cleanup    func()
 }
 
+func (c *Core) AddStartFunc(s startFuncType) {
+	c.startFuncs = append(c.startFuncs, s)
+}
+
+func (c *Core) AddStopFunc(s stopFuncType) {
+	c.stopFuncs = append(c.stopFuncs, s)
+}
+
 func New(opts ...Options) *Core {
 	c := &Core{}
 
@@ -84,6 +92,13 @@ func hasServiceErrors(ctx context.Context, errChans <-chan <-chan error) <-chan 
 
 func (c *Core) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
 	log.Ctx(ctx).Info().Msg("starting backend")
+	if len(c.startFuncs) == 0 {
+		errChan := make(chan error)
+		go func() {
+			errChan <- ErrNoService
+		}()
+		return nil, errChan
+	}
 
 	startedChans := make(chan (<-chan struct{}), len(c.startFuncs))
 	errChans := make(chan (<-chan error))
@@ -107,16 +122,18 @@ func (c *Core) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
 	return allStarted, hasErrorChan
 }
 
-func (c *Core) Shutdown(ctx context.Context) {
-	log.Ctx(ctx).Debug().Msg("closing services")
+func (c *Core) Shutdown(ctx context.Context) error {
+	log.Ctx(ctx).Debug().Msg("shutting down")
 	wg := sync.WaitGroup{}
+
+	var err error
 	for _, fn := range c.stopFuncs {
 		wg.Add(1)
 		go func(f stopFuncType) {
 			defer wg.Done()
-			err := f(ctx)
+			err = f(ctx)
 			if err != nil {
-				log.Ctx(ctx).Fatal().Caller().Err(err).Msg("closing service")
+				log.Ctx(ctx).Error().Err(err).Msg("closing service")
 			}
 		}(fn)
 	}
@@ -126,9 +143,14 @@ func (c *Core) Shutdown(ctx context.Context) {
 	if c.cleanup != nil {
 		c.cleanup()
 	}
+
+	return err
 }
 
-var ErrSignalReceived = errors.New("signal received")
+var (
+	ErrSignalReceived = errors.New("signal received")
+	ErrNoService      = errors.New("core must be started with at least one service")
+)
 
 func aggChan[T any](ctx context.Context, chans <-chan (<-chan T)) <-chan T {
 	var wg sync.WaitGroup

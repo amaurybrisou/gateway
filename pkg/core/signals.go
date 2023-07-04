@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/rs/zerolog/log"
 )
 
 type CoreSignals struct {
@@ -23,6 +25,7 @@ func (s CoreSignals) New(c *Core) {
 
 func (s CoreSignals) Stop(ctx context.Context) error {
 	close(s.done)
+	log.Ctx(ctx).Debug().Msg("signal handler stopped")
 	return nil
 }
 
@@ -42,6 +45,7 @@ func (s CoreSignals) Start(ctx context.Context) (<-chan struct{}, <-chan error) 
 		defer close(startedChan)
 		defer close(errChan)
 		startedChan <- struct{}{}
+		log.Ctx(ctx).Debug().Msg("signal handler ready")
 		select {
 		case <-s.done:
 			return

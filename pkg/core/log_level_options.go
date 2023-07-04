@@ -24,17 +24,23 @@ func (i *logLevelOption) New(c *Core) {
 		log.Fatal().Err(err).Msg("could not parse log level")
 	}
 
+	c.startFuncs = append(c.startFuncs, i.Start)
+	c.stopFuncs = append(c.stopFuncs, i.Stop)
+
 	zerolog.SetGlobalLevel(l)
 }
 
 func (i *logLevelOption) Start(ctx context.Context) (<-chan struct{}, <-chan error) {
 	startedChan := make(chan struct{})
-	defer close(startedChan)
 
 	if i.Output != nil {
 		log.Logger = log.Logger.Output(i.Output)
 	}
-	startedChan <- struct{}{}
+
+	go func() {
+		defer close(startedChan)
+		startedChan <- struct{}{}
+	}()
 
 	return startedChan, nil
 }

@@ -16,6 +16,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - gw_internal
 
   postgres:
     image: postgres:9
@@ -34,6 +36,8 @@ services:
       retries: 30
       timeout: 5s
       start_period: 5s
+    networks:
+      - gw_internal
 
   adminer:
     image: adminer
@@ -47,6 +51,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - gw_internal
+
+networks:
+  gw_internal:
 
   # pgadmin:
   #   image: dpage/pgadmin4
