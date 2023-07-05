@@ -72,5 +72,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools v2.2.0+incompatible // indirect
 )
-
-replace github.com/amaurybrisou/ablib => ../ablib

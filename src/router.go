@@ -57,7 +57,7 @@ func Router(s gwservices.Services, db *database.Database, rateLimit float64, bur
 		})
 	})
 
-	r.HandleFunc("/*", s.Proxy().ProxyHandler)
+	r.HandleFunc("/*", s.Proxy().ServiceAccessHandler(authMiddleware.JWTAuth))
 
 	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
 		route = strings.Replace(route, "/*/", "/", -1)

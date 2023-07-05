@@ -9,6 +9,7 @@ import (
 
 	coremiddleware "github.com/amaurybrisou/ablib/http/middleware"
 	"github.com/amaurybrisou/gateway/src/database"
+	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -36,19 +37,56 @@ func New(db *database.Database, cfg Config) Proxy {
 	}
 }
 
-func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
-	pathPrefix := s.extractPathPrefix(r.URL.Path)
-	log.Ctx(r.Context()).Debug().Any("prefix", pathPrefix).Any("url.path", r.URL.Path).Msg("proxy request received")
+func (s Proxy) ProxyHandler(host, pathPrefix string, w http.ResponseWriter, r *http.Request) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetURL, err := url.Parse(host)
+		if err != nil {
+			log.Ctx(r.Context()).Error().Err(err).Msg("Failed to parse backend URL")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 
-	// Lookup the backend URL based on the path prefix
-	service, err := s.db.GetServiceByPrefixOrDomain(r.Context(), pathPrefix, r.Host)
-	if err != nil {
-		log.Ctx(r.Context()).Warn().Err(err).Msg("backend not found")
-		http.Redirect(w, r, s.notFoundRedirectURL, http.StatusPermanentRedirect)
-		return
+		proxy := &httputil.ReverseProxy{
+			Director: func(req *http.Request) {
+				req.URL.Scheme = targetURL.Scheme
+				req.URL.Host = targetURL.Host
+				req.URL.Path = strings.TrimPrefix(req.URL.Path, pathPrefix)
+				req.Header.Add("X-Request-Id", middleware.GetReqID(req.Context()))
+				req.Header.Add("X-Forwarded-For", req.RemoteAddr)
+				req.Host = targetURL.Host
+				log.Ctx(r.Context()).Debug().Any("url", r.URL).Any("host", r.Host).Msg("prosying to")
+			},
+		}
+
+		proxy.ServeHTTP(w, r)
+	})
+}
+
+func (p Proxy) ServiceAccessHandler(authMiddleware func(next http.Handler) http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		pathPrefix := p.extractPathPrefix(r.URL.Path)
+		log.Ctx(r.Context()).Debug().Any("prefix", pathPrefix).Any("url.path", r.URL.Path).Msg("proxy request received")
+
+		// Lookup the backend URL based on the path prefix
+		service, err := p.db.GetServiceByPrefixOrDomain(r.Context(), pathPrefix, r.Host)
+		if err != nil {
+			log.Ctx(r.Context()).Warn().Err(err).Msg("backend not found")
+			http.Redirect(w, r, p.notFoundRedirectURL, http.StatusPermanentRedirect)
+			return
+		}
+
+		if len(service.RequiredRoles) > 0 {
+			// Service requires authentication, perform JWT authentication
+			authMiddleware(p.CheckRequiredRoles(service, p.ProxyHandler(service.Host, pathPrefix, w, r))).ServeHTTP(w, r)
+		} else {
+			// Service does not require authentication, continue to the next handler
+			p.ProxyHandler(service.Host, pathPrefix, w, r).ServeHTTP(w, r)
+		}
 	}
+}
 
-	if len(service.RequiredRoles) > 0 {
+func (p Proxy) CheckRequiredRoles(service models.Service, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := r.Context().Value(coremiddleware.UserIDCtxKey).(uuid.UUID)
 		if !ok {
 			log.Ctx(r.Context()).Error().Err(errors.New("invalid user_id")).Send()
@@ -56,7 +94,7 @@ func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		hasRole, err := s.db.HasRole(r.Context(), userID, service.RequiredRoles...)
+		hasRole, err := p.db.HasRole(r.Context(), userID, service.RequiredRoles...)
 		if err != nil {
 			log.Ctx(r.Context()).Error().Err(err).Msg("determine user roles")
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -64,32 +102,12 @@ func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !hasRole {
-			http.Redirect(w, r, s.noRoleRedirectURL+"/"+service.Name, http.StatusTemporaryRedirect)
+			http.Redirect(w, r, p.noRoleRedirectURL+"/"+service.Name, http.StatusTemporaryRedirect)
 			return
 		}
-	}
 
-	// Set the backend URL as the target URL for the reverse proxy
-	targetURL, err := url.Parse(service.Host)
-	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("Failed to parse backend URL")
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	proxy := &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
-			req.URL.Scheme = targetURL.Scheme
-			req.URL.Host = targetURL.Host
-			req.URL.Path = strings.TrimPrefix(req.URL.Path, pathPrefix)
-			req.Header.Add("X-Request-Id", middleware.GetReqID(req.Context()))
-			req.Header.Add("X-Forwarded-For", req.RemoteAddr)
-			req.Host = targetURL.Host
-			log.Ctx(r.Context()).Debug().Any("url", r.URL).Any("host", r.Host).Msg("prosying to")
-		},
-	}
-
-	proxy.ServeHTTP(w, r)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (p Proxy) extractPathPrefix(path string) string {
