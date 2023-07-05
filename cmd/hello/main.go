@@ -36,7 +36,7 @@ func main() {
 	}()
 
 	router2 := http.NewServeMux()
-	router2.HandleFunc("/hello", helloHandler)
+	router2.HandleFunc("/", helloHandler)
 	router2.HandleFunc("/hc", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(time.Second * 4)
 		fmt.Println("request received", r.Header, r.Host, r.RequestURI)

@@ -76,16 +76,16 @@ down:
 clean: down
 	rm -rf .bin .data
 
-.PHONY: up
+.PHONY: m-up
 m-up: $(GOBIN)/migrate
 	$(GOBIN)/$(MIGRATE_BINARY) -source file://$(MIGRATE_DIR) -database postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable up
 
-.PHONY: down
+.PHONY: m-down
 m-down: $(GOBIN)/migrate
 	$(GOBIN)/$(MIGRATE_BINARY) -path $(ROOT_DIR)/migrations -database postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable down
 
-.PHONY: create-migration
-create-migration: $(GOBIN)/migrate
+.PHONY: m-create
+m-create: $(GOBIN)/migrate
 	@read -p "Enter the name of the migration: " NAME; \
 	$(GOBIN)/$(MIGRATE_BINARY) create -ext sql -dir $(MIGRATE_DIR) $$NAME
 

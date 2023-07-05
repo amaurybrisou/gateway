@@ -95,8 +95,11 @@ func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-// Helper function to extract the path prefix from a URL.
 func (p Proxy) extractPathPrefix(path string) string {
-	path = strings.Split(strings.TrimPrefix(path, p.stripPrefix), "/")[1] // Assuming the path has a leading slash
-	return "/" + strings.Split(path, "/")[0]
+	path = strings.TrimPrefix(path, p.stripPrefix)
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) > 1 {
+		return "/" + parts[1]
+	}
+	return path
 }
