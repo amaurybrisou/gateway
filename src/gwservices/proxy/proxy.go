@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
+	coremiddleware "github.com/amaurybrisou/ablib/http/middleware"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"

@@ -3,7 +3,7 @@ package cryptlib_test
 import (
 	"testing"
 
-	"github.com/amaurybrisou/gateway/pkg/core/cryptlib"
+	"github.com/amaurybrisou/ablib/core/cryptlib"
 	"golang.org/x/crypto/bcrypt"
 )
 

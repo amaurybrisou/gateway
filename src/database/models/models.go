@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	coremodels "github.com/amaurybrisou/gateway/pkg/core/models"
+	coremodels "github.com/amaurybrisou/ablib/core/models"
 	"github.com/google/uuid"
 )
 

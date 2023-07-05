@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/amaurybrisou/gateway/pkg/core"
-	"github.com/amaurybrisou/gateway/pkg/core/jwtlib"
+	"github.com/amaurybrisou/ablib/core"
+	"github.com/amaurybrisou/ablib/core/jwtlib"
 	"github.com/amaurybrisou/gateway/src"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/gwservices"

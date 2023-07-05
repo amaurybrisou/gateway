@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	coremodels "github.com/amaurybrisou/gateway/pkg/core/models"
-	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
+	coremodels "github.com/amaurybrisou/ablib/core/models"
+	coremiddleware "github.com/amaurybrisou/ablib/http/middleware"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/gwservices"
 	"github.com/go-chi/chi/v5"
