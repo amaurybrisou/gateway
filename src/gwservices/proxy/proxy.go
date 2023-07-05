@@ -38,6 +38,7 @@ func New(db *database.Database, cfg Config) Proxy {
 
 func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	pathPrefix := s.extractPathPrefix(r.URL.Path)
+	log.Ctx(r.Context()).Debug().Any("prefix", pathPrefix).Any("url.path", r.URL.Path).Msg("proxy request received")
 
 	// Lookup the backend URL based on the path prefix
 	service, err := s.db.GetServiceByPrefixOrDomain(r.Context(), pathPrefix, r.Host)
@@ -84,6 +85,7 @@ func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 			req.Header.Add("X-Request-Id", middleware.GetReqID(req.Context()))
 			req.Header.Add("X-Forwarded-For", req.RemoteAddr)
 			req.Host = targetURL.Host
+			log.Ctx(r.Context()).Debug().Any("url", r.URL).Any("host", r.Host).Msg("prosying to")
 		},
 	}
 
