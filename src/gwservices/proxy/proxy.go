@@ -47,23 +47,25 @@ func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, ok := r.Context().Value(coremiddleware.UserIDCtxKey).(uuid.UUID)
-	if !ok {
-		log.Ctx(r.Context()).Error().Err(errors.New("invalid user_id")).Send()
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
+	if len(service.RequiredRoles) > 0 {
+		userID, ok := r.Context().Value(coremiddleware.UserIDCtxKey).(uuid.UUID)
+		if !ok {
+			log.Ctx(r.Context()).Error().Err(errors.New("invalid user_id")).Send()
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 
-	hasRole, err := s.db.HasRole(r.Context(), userID, service.RequiredRoles...)
-	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("determine user roles")
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
+		hasRole, err := s.db.HasRole(r.Context(), userID, service.RequiredRoles...)
+		if err != nil {
+			log.Ctx(r.Context()).Error().Err(err).Msg("determine user roles")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 
-	if !hasRole {
-		http.Redirect(w, r, s.noRoleRedirectURL+"/"+service.Name, http.StatusTemporaryRedirect)
-		return
+		if !hasRole {
+			http.Redirect(w, r, s.noRoleRedirectURL+"/"+service.Name, http.StatusTemporaryRedirect)
+			return
+		}
 	}
 
 	// Set the backend URL as the target URL for the reverse proxy
@@ -74,21 +76,14 @@ func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trim, err := url.JoinPath(s.stripPrefix, pathPrefix)
-	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("Failed to parse backend URL")
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
 	proxy := &httputil.ReverseProxy{
-		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.Out.URL.Scheme = targetURL.Scheme
-			pr.Out.URL.Host = targetURL.Host
-			pr.Out.URL.Path = strings.TrimPrefix(pr.Out.URL.Path, trim)
-			pr.Out.Header.Add("X-Request-Id", middleware.GetReqID(pr.In.Context()))
-			pr.Out.Header.Add("X-Forwarded-For", pr.In.RemoteAddr)
-			pr.Out.Host = targetURL.Host
+		Director: func(req *http.Request) {
+			req.URL.Scheme = targetURL.Scheme
+			req.URL.Host = targetURL.Host
+			req.URL.Path = strings.TrimPrefix(req.URL.Path, pathPrefix)
+			req.Header.Add("X-Request-Id", middleware.GetReqID(req.Context()))
+			req.Header.Add("X-Forwarded-For", req.RemoteAddr)
+			req.Host = targetURL.Host
 		},
 	}
 
@@ -97,7 +92,7 @@ func (s Proxy) ProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 func (p Proxy) extractPathPrefix(path string) string {
 	path = strings.TrimPrefix(path, p.stripPrefix)
-	parts := strings.SplitN(path, "/", 2)
+	parts := strings.Split(path, "/")
 	if len(parts) > 1 {
 		return "/" + parts[1]
 	}

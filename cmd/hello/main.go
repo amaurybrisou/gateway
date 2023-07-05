@@ -5,16 +5,15 @@ import (
 	"log"
 	"net/http"
 	"sync"
-	"time"
 )
 
 func main() {
 	// http.HandleFunc("/", helloHandler)
 
 	router := http.NewServeMux()
-	router.HandleFunc("/hello", helloHandler)
-	router.HandleFunc("/healthcheck", helloHandler)
-	router.HandleFunc("/hello/custom", helloHandler)
+	router.HandleFunc("/", helloHandler)
+	router.HandleFunc("/hc", helloHandler)
+	router.HandleFunc("/custom", helloHandler)
 
 	wg := sync.WaitGroup{}
 
@@ -26,7 +25,7 @@ func main() {
 	}()
 
 	router1 := http.NewServeMux()
-	router1.HandleFunc("/healthcheck", helloHandler)
+	router1.HandleFunc("/hc", helloHandler)
 
 	wg.Add(1)
 	go func() {
@@ -37,9 +36,8 @@ func main() {
 
 	router2 := http.NewServeMux()
 	router2.HandleFunc("/", helloHandler)
-	router2.HandleFunc("/hc", func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(time.Second * 4)
-		fmt.Println("request received", r.Header, r.Host, r.RequestURI)
+	router2.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("healthcheck received", r.Header, r.Host, r.RequestURI)
 		w.WriteHeader(200)
 		w.Write(nil) //nolint
 	})

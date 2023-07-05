@@ -81,7 +81,7 @@ func main() {
 			Audience:  core.LookupEnv("JWT_AUDIENCE", "insecure-key"),
 		},
 		ProxyConfig: proxy.Config{
-			StripPrefix:         "/auth",
+			StripPrefix:         "",
 			NotFoundRedirectURL: "/services",
 			NoRoleRedirectURL:   "/pricing",
 		},
@@ -109,7 +109,7 @@ func main() {
 			core.LookupEnvInt("HTTP_PROM_PORT", 2112),
 		),
 		core.HeartBeat(
-			core.WithRequestPath("/healthcheck"),
+			core.WithRequestPath("/hc"),
 			core.WithClientTimeout(5*time.Second),
 			core.WithInterval(core.LookupEnvDuration("HEARTBEAT_INTERVAL", "10s")),
 			core.WithErrorIncrement(core.LookupEnvDuration("HEARTBEAT_ERROR_INCREMENT", "5s")),

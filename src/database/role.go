@@ -14,12 +14,11 @@ func (d Database) HasRole(ctx context.Context, userID uuid.UUID, roles ...models
 	query := `
 	SELECT EXISTS (
 		SELECT 1
-		FROM "user" u
-		LEFT JOIN "user_role" ur ON u.id = ur.user_id
-		WHERE ($2 = '{}') OR
-		(
-		  (user_id = $1) AND 
-		  (u.role IN($2) AND (expires_at IS NULL OR expires_at > now()) AND u.deleted_at IS NULL)) 
+		FROM user_role
+		WHERE user_id = $1 
+		AND (
+			(role = ANY($2) AND (expires_at IS NULL OR expires_at > now()) AND deleted_at IS NULL)
+		)
 	  )`
 
 	var hasRole bool

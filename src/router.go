@@ -55,9 +55,9 @@ func Router(s gwservices.Services, db *database.Database, rateLimit float64, bur
 			adminRouter.Get("/services", s.Service().GetAllServicesHandler)
 			adminRouter.Get("/version", Version)
 		})
-
-		authenticatedRouter.HandleFunc("/*", s.Proxy().ProxyHandler)
 	})
+
+	r.HandleFunc("/*", s.Proxy().ProxyHandler)
 
 	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
 		route = strings.Replace(route, "/*/", "/", -1)

@@ -101,7 +101,9 @@ func (d *Database) GetServiceByName(ctx context.Context, serviceName string) (mo
 
 	service, err := scanServiceFull(row)
 	if err != nil {
-		// Handle the error (e.g., return an error response, log the error)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Service{}, nil
+		}
 		return models.Service{}, err
 	}
 
@@ -185,9 +187,6 @@ func scanService(row localRow) (models.Service, error) {
 		&service.RequiredRoles,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Service{}, nil
-		}
 		return models.Service{}, fmt.Errorf("failed to scan service row: %w", err)
 	}
 
@@ -218,9 +217,6 @@ func scanServiceFull(row localRow) (models.Service, error) {
 		&service.DeletedAt,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Service{}, nil
-		}
 		return models.Service{}, fmt.Errorf("failed to scan service row: %w", err)
 	}
 
