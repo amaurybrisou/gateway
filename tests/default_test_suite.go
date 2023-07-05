@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/amaurybrisou/ablib/core"
-	"github.com/amaurybrisou/ablib/core/jwtlib"
+	"github.com/amaurybrisou/ablib"
+	"github.com/amaurybrisou/ablib/jwtlib"
 	"github.com/amaurybrisou/gateway/src"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/gwservices"
@@ -23,7 +23,7 @@ import (
 
 type DefaultTestSuite struct {
 	suite.Suite
-	lcore *core.Core
+	lcore *ablib.Core
 
 	Container  *Container
 	db         *database.Database
@@ -88,19 +88,19 @@ func (s *DefaultTestSuite) SetupSuite() {
 		}()
 	}
 
-	domain := core.LookupEnv("DOMAIN", "http://localhost:50000")
+	domain := ablib.LookupEnv("DOMAIN", "http://localhost:50000")
 
 	services := gwservices.NewServices(s.db, nil, gwservices.ServiceConfig{
 		PaymentConfig: payment.Config{
-			StripeKey:           core.LookupEnv("STRIPE_KEY", ""),
-			StripeSuccessURL:    core.LookupEnv("STRIPE_SUCCESS_URL", domain+"/login"),
-			StripeCancelURL:     core.LookupEnv("STRIPE_CANCEL_URL", domain),
-			StripeWebHookSecret: core.LookupEnv("STRIPE_WEBHOOK_SECRET", ""),
+			StripeKey:           ablib.LookupEnv("STRIPE_KEY", ""),
+			StripeSuccessURL:    ablib.LookupEnv("STRIPE_SUCCESS_URL", domain+"/login"),
+			StripeCancelURL:     ablib.LookupEnv("STRIPE_CANCEL_URL", domain),
+			StripeWebHookSecret: ablib.LookupEnv("STRIPE_WEBHOOK_SECRET", ""),
 		},
 		JwtConfig: jwtlib.Config{
-			SecretKey: core.LookupEnv("JWT_KEY", "insecure-key"),
-			Issuer:    core.LookupEnv("JWT_ISSUER", domain),
-			Audience:  core.LookupEnv("JWT_AUDIENCE", "insecure-key"),
+			SecretKey: ablib.LookupEnv("JWT_KEY", "insecure-key"),
+			Issuer:    ablib.LookupEnv("JWT_ISSUER", domain),
+			Audience:  ablib.LookupEnv("JWT_AUDIENCE", "insecure-key"),
 		},
 		ProxyConfig: proxy.Config{
 			StripPrefix:         "/auth",
@@ -111,14 +111,14 @@ func (s *DefaultTestSuite) SetupSuite() {
 
 	r := src.Router(services, s.db, 10, 10)
 
-	lcore := core.New(
-		core.WithMigrate(
-			core.LookupEnv("DB_MIGRATIONS_PATH", "file://../migrations"),
+	lcore := ablib.NewCore(
+		ablib.WithMigrate(
+			ablib.LookupEnv("DB_MIGRATIONS_PATH", "file://../migrations"),
 			s.connString,
 		),
-		core.WithLogLevel(core.LookupEnv("LOG_LEVEL", "debug")),
-		core.WithHTTPServer(
-			core.LookupEnv("HTTP_SERVER_ADDR", "0.0.0.0"),
+		ablib.WithLogLevel(ablib.LookupEnv("LOG_LEVEL", "debug")),
+		ablib.WithHTTPServer(
+			ablib.LookupEnv("HTTP_SERVER_ADDR", "0.0.0.0"),
 			50000,
 			r,
 		),

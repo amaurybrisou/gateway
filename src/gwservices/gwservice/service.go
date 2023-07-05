@@ -7,9 +7,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/amaurybrisou/ablib/core/cryptlib"
-	"github.com/amaurybrisou/ablib/core/jwtlib"
+	"github.com/amaurybrisou/ablib/cryptlib"
 	coremiddleware "github.com/amaurybrisou/ablib/http/middleware"
+	"github.com/amaurybrisou/ablib/jwtlib"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/amaurybrisou/gateway/src/serializer"

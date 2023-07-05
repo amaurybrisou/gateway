@@ -1,7 +1,7 @@
 package gwservices
 
 import (
-	"github.com/amaurybrisou/ablib/core/jwtlib"
+	"github.com/amaurybrisou/ablib/jwtlib"
 	"github.com/amaurybrisou/ablib/mailcli"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/gwservices/gwservice"
