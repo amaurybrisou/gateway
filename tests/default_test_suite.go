@@ -1,11 +1,14 @@
 package test
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/amaurybrisou/ablib"
 	"github.com/amaurybrisou/ablib/jwtlib"
@@ -19,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/stripe/stripe-go/v72/webhook"
 )
 
 type DefaultTestSuite struct {
@@ -26,7 +30,7 @@ type DefaultTestSuite struct {
 	lcore *ablib.Core
 
 	Container  *Container
-	db         *database.Database
+	DB         *database.Database
 	connString string
 }
 
@@ -73,7 +77,7 @@ func (s *DefaultTestSuite) SetupSuite() {
 				return err
 			}
 
-			s.db = database.New(db)
+			s.DB = database.New(db)
 			s.connString = db.Config().ConnString()
 
 			return nil
@@ -90,12 +94,12 @@ func (s *DefaultTestSuite) SetupSuite() {
 
 	domain := ablib.LookupEnv("DOMAIN", "http://localhost:50000")
 
-	services := gwservices.NewServices(s.db, nil, gwservices.ServiceConfig{
+	services := gwservices.NewServices(s.DB, nil, gwservices.ServiceConfig{
 		PaymentConfig: payment.Config{
 			StripeKey:           ablib.LookupEnv("STRIPE_KEY", ""),
 			StripeSuccessURL:    ablib.LookupEnv("STRIPE_SUCCESS_URL", domain+"/login"),
 			StripeCancelURL:     ablib.LookupEnv("STRIPE_CANCEL_URL", domain),
-			StripeWebHookSecret: ablib.LookupEnv("STRIPE_WEBHOOK_SECRET", ""),
+			StripeWebHookSecret: ablib.LookupEnv("STRIPE_WEBHOOK_SECRET", "test-webhook-secret"),
 		},
 		JwtConfig: jwtlib.Config{
 			SecretKey: ablib.LookupEnv("JWT_KEY", "insecure-key"),
@@ -109,7 +113,7 @@ func (s *DefaultTestSuite) SetupSuite() {
 		},
 	})
 
-	r := src.Router(services, s.db, 10, 10)
+	r := src.Router(services, s.DB, 10, 10)
 
 	lcore := ablib.NewCore(
 		ablib.WithMigrate(
@@ -153,4 +157,19 @@ func (s *DefaultTestSuite) TearDownSuite() {
 
 func (s *DefaultTestSuite) Post(path, contentType, body string) (*http.Response, error) {
 	return http.Post("http://localhost:50000"+path, contentType, strings.NewReader(body))
+}
+
+func (s *DefaultTestSuite) ReadFile(path string) []byte {
+	b, err := os.ReadFile(path)
+	require.NoError(s.T(), err)
+	return b
+}
+
+func (s *DefaultTestSuite) PostWebhook(contentType string, bodyBytes []byte) (*http.Response, error) {
+	now := time.Now()
+	signature := webhook.ComputeSignature(now, bodyBytes, "test-webhook-secret")
+	req, err := http.NewRequest(http.MethodPost, "http://localhost:50000/payment/webhook", bytes.NewReader(bodyBytes))
+	require.NoError(s.T(), err)
+	req.Header.Add("Stripe-Signature", fmt.Sprintf("t=%d,v1=%s", now.Unix(), hex.EncodeToString(signature)))
+	return http.DefaultClient.Do(req)
 }

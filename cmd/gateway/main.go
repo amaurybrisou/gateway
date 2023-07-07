@@ -109,7 +109,7 @@ func main() {
 			ablib.LookupEnvInt("HTTP_PROM_PORT", 2112),
 		),
 		ablib.HeartBeat(
-			ablib.WithRequestPath("/hc"),
+			ablib.WithRequestPath("/healthcheck"),
 			ablib.WithClientTimeout(5*time.Second),
 			ablib.WithInterval(ablib.LookupEnvDuration("HEARTBEAT_INTERVAL", "10s")),
 			ablib.WithErrorIncrement(ablib.LookupEnvDuration("HEARTBEAT_ERROR_INCREMENT", "5s")),

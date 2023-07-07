@@ -8,13 +8,10 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/amaurybrisou/ablib/cryptlib"
 	"github.com/amaurybrisou/ablib/jwtlib"
 	"github.com/amaurybrisou/ablib/mailcli"
-	coremodels "github.com/amaurybrisou/ablib/models"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/google/uuid"
@@ -22,7 +19,6 @@ import (
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/client"
 	"github.com/stripe/stripe-go/v72/webhook"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type Service struct {
@@ -57,7 +53,7 @@ func NewService(db *database.Database, jwt *jwtlib.JWT, mail *mailcli.MailClient
 	}
 }
 
-func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) {
+func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) { //nolint
 	// Read the request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -84,18 +80,39 @@ func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// https://stripe.com/docs/api/events/types.
 	switch event.Type {
-	case "checkout.session.completed":
-		var session stripe.CheckoutSession
-		err := json.Unmarshal(event.Data.Raw, &session)
+	case "invoice.payment_succeeded":
+	case "customer.created":
+		user, err := s.customerCreated(r.Context(), event.Data.Raw)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
+			log.Ctx(r.Context()).Error().Err(err).Msg("creating user")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		user, err := s.RegisterUser(r.Context(), &session)
+		log.Ctx(r.Context()).Info().
+			Any("user_id", user.ID).
+			Any("customer_id", user.ExternalID).
+			Msg("new user created")
+
+		json.NewEncoder(w).Encode(user) //nolint
+	case "checkout.session.completed":
+		var session stripe.CheckoutSession
+		err := json.Unmarshal(event.Data.Raw, &session)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
+			log.Ctx(r.Context()).Error().Err(err).Msg("unmarshal checkout session")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		user, err := s.db.GetFullUserByEmail(r.Context(), session.CustomerDetails.Email)
+		if err != nil {
+			log.Ctx(r.Context()).Error().Err(err).Msg("get user by email")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if user.ID != uuid.Nil {
+			log.Ctx(r.Context()).Error().Err(errors.New("user not found")).Send()
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -103,7 +120,7 @@ func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) {
 		serviceIDstring := session.ClientReferenceID
 		serviceID, err := uuid.Parse(serviceIDstring)
 		if err != nil {
-			log.Error().Err(err).Msg("failed parse client_reference_id")
+			log.Ctx(r.Context()).Error().Err(err).Msg("failed parse client_reference_id")
 			http.Error(w, "failed parse client_reference_id", http.StatusInternalServerError)
 			return
 		}
@@ -174,7 +191,6 @@ func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		default:
-			fmt.Println(sub.PauseCollection.Behavior)
 			currentPeriodendAt := time.Unix(sub.CurrentPeriodEnd, 0)
 			_, err = s.db.UpdateRoleExpiration(r.Context(), sub.ID, &currentPeriodendAt)
 			if err != nil {
@@ -228,54 +244,4 @@ func (s Service) DeleteRole(ctx context.Context, sub *stripe.Subscription) error
 	}
 
 	return nil
-}
-
-func (s Service) RegisterUser(ctx context.Context, session *stripe.CheckoutSession) (models.User, error) {
-	u, err := s.db.GetFullUserByEmail(ctx, session.CustomerDetails.Email)
-	if err != nil {
-		return u, err
-	}
-
-	if u.ID != uuid.Nil {
-		return u, nil
-	}
-
-	password, err := cryptlib.GenerateRandomPassword(16)
-	if err != nil {
-		return u, err
-	}
-
-	fmt.Println(strings.Repeat("#", 100))
-	fmt.Println("Password:", password)
-	fmt.Println(strings.Repeat("#", 100))
-
-	hashedPassword, err := cryptlib.GenerateHash(password, bcrypt.DefaultCost)
-	if err != nil {
-		return u, err
-	}
-
-	u = models.User{
-		ID:         uuid.New(),
-		ExternalID: session.Customer.ID,
-		Email:      session.CustomerDetails.Email,
-		Firstname:  session.CustomerDetails.Name,
-		Password:   hashedPassword,
-		Role:       coremodels.USER,
-		CreatedAt:  time.Now(),
-	}
-
-	u, err = s.db.CreateUser(ctx, u)
-	if err != nil {
-		return u, err
-	}
-
-	go func() {
-		err := s.mailcli.SendPasswordEmail(u.Email, hashedPassword)
-		if err != nil {
-			log.Ctx(ctx).Error().Err(err).Msg("error sending auto generated password email")
-		}
-		log.Ctx(ctx).Debug().Any("email", u.Email).Msg("auto generated pasword email send")
-	}()
-
-	return u, nil
 }
