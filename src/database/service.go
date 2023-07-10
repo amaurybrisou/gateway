@@ -15,7 +15,7 @@ import (
 
 const (
 	serviceSelectFields     = "id, name, description, prefix, domain, host, image_url, status, required_roles"
-	serviceSelectFieldsFull = "id, name, description, prefix, domain, host, image_url, status, required_roles, pricing_table_key, pricing_table_publishable_key, created_at, updated_at, deleted_at"
+	serviceSelectFieldsFull = "id, name, description, prefix, domain, host, image_url, status, required_roles, pricing_table_key, pricing_table_publishable_key, created_at, updated_at, deleted_at, required_roles = '{}' as has_access"
 	serviceInsertFields     = "id, name, description, prefix, domain, host, image_url, status, required_roles, pricing_table_key, pricing_table_publishable_key, created_at"
 )
 
@@ -111,7 +111,7 @@ func (d *Database) GetServiceByName(ctx context.Context, serviceName string) (mo
 }
 
 func (d Database) GetServices(ctx context.Context) ([]*models.Service, error) {
-	query := `SELECT ` + serviceSelectFieldsFull + ` FROM service`
+	query := `SELECT ` + serviceSelectFieldsFull + ` FROM service WHERE deleted_at IS NULL`
 
 	rows, err := d.db.Query(ctx, query)
 	if err != nil {
@@ -215,6 +215,7 @@ func scanServiceFull(row localRow) (models.Service, error) {
 		&service.CreatedAt,
 		&service.UpdatedAt,
 		&service.DeletedAt,
+		&service.HasAccess,
 	)
 	if err != nil {
 		return models.Service{}, fmt.Errorf("failed to scan service row: %w", err)

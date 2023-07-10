@@ -18,7 +18,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func Router(s gwservices.Services, db *database.Database, rateLimit float64, burst int) http.Handler {
+func Router(s gwservices.Services, db *database.Database, publicRootPath string, rateLimit float64, burst int) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
@@ -30,8 +30,10 @@ func Router(s gwservices.Services, db *database.Database, rateLimit float64, bur
 	r.Use(middleware.Timeout(time.Second * 10))
 
 	// UNAUTHENTICATED
-	// r.HandleFunc("/", rootHandler(db))
-	r.Post("/login", s.Service().LoginHandler)
+	r.Handle("/", http.RedirectHandler("/home", http.StatusPermanentRedirect))
+	r.Handle("/home/*", http.FileServer(http.Dir(publicRootPath)))
+	r.Post("/login", s.Service().PostLoginHandler)
+
 	r.Post("/payment/webhook", s.Payment().StripeWebhook)
 	r.With(coremiddleware.JsonContentType()).Get("/services", s.Service().GetAllServicesHandler)
 	r.Get("/pricing/{service_name}", s.Service().ServicePricePage)
@@ -46,6 +48,8 @@ func Router(s gwservices.Services, db *database.Database, rateLimit float64, bur
 		authenticatedRouter.Use(coremiddleware.JsonContentType())
 
 		authenticatedRouter.Post("/update-password", s.Service().PasswordUpdateHandler)
+		authenticatedRouter.Get("/user", s.Service().GetUserHandler)
+		authenticatedRouter.Get("/services", s.Service().GetAllServicesHandler)
 
 		authenticatedRouter.Route("/admin", func(adminRouter chi.Router) {
 			adminRouter.Use(authMiddleware.IsAdmin)

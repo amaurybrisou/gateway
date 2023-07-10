@@ -48,7 +48,7 @@ func (s Service) CreateServiceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(serializer.Service(&createdService)); err != nil {
+	if err := json.NewEncoder(w).Encode(serializer.Service(&createdService, coremiddleware.IsAdmin(r.Context()))); err != nil {
 		log.Ctx(r.Context()).Err(err).Send()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -93,14 +93,21 @@ func (s Service) DeleteServiceHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s Service) GetAllServicesHandler(w http.ResponseWriter, r *http.Request) {
-	services, err := s.db.GetServices(r.Context())
+	user := coremiddleware.User(r.Context())
+	var services []*models.Service
+	var err error
+	if user != nil {
+		services, err = s.db.GetUserServices(r.Context(), user.GetID())
+	} else {
+		services, err = s.db.GetServices(r.Context())
+	}
 	if err != nil {
 		log.Ctx(r.Context()).Err(err).Send()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(serializer.Services(services)); err != nil {
+	if err := json.NewEncoder(w).Encode(serializer.Services(services, coremiddleware.IsAdmin(r.Context()))); err != nil {
 		log.Ctx(r.Context()).Err(err).Send()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -164,7 +171,7 @@ func (s Service) ServicePricePage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
+func (s Service) PostLoginHandler(w http.ResponseWriter, r *http.Request) {
 	type Credentials struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -238,5 +245,22 @@ func (s Service) PasswordUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	json.NewEncoder(w).Encode(user) //nolint
+}
+
+// GetUserHandler is an HTTP handler for retrieving user information.
+func (s Service) GetUserHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract the user ID from the request context
+	userID := coremiddleware.User(r.Context()).GetID()
+
+	// Retrieve the user from the database
+	user, err := s.db.GetUserByID(r.Context(), userID)
+	if err != nil {
+		log.Ctx(r.Context()).Error().Err(err).Msg("Failed to retrieve user")
+		http.Error(w, "Failed to retrieve user", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the user information as JSON response
 	json.NewEncoder(w).Encode(user) //nolint
 }

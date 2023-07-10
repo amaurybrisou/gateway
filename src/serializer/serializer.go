@@ -21,6 +21,8 @@ type PublicService struct {
 	CreatedAt                  time.Time  `json:"created_at,omitempty"`
 	UpdatedAt                  *time.Time `json:"updated_at,omitempty"`
 	DeletedAt                  *time.Time `json:"deleted_at,omitempty"`
+	HasAccess                  *bool      `json:"has_access,omitempty"`
+	IsFree                     bool       `json:"is_free,omitempty"`
 }
 
 type PublicUser struct {
@@ -35,7 +37,12 @@ type PublicUser struct {
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
-func Service(service *models.Service) *PublicService {
+func Service(service *models.Service, admin bool) *PublicService {
+	if !admin {
+		if service.Status != models.ServiceStatusOK {
+			service.Status = "service is unreachable"
+		}
+	}
 	return &PublicService{
 		ID:                         service.ID,
 		Name:                       service.Name,
@@ -50,13 +57,15 @@ func Service(service *models.Service) *PublicService {
 		CreatedAt:                  service.CreatedAt,
 		UpdatedAt:                  service.UpdatedAt,
 		DeletedAt:                  service.DeletedAt,
+		HasAccess:                  service.HasAccess,
+		IsFree:                     len(service.RequiredRoles) == 0,
 	}
 }
 
-func Services(services []*models.Service) []*PublicService {
+func Services(services []*models.Service, admin bool) []*PublicService {
 	result := make([]*PublicService, len(services))
 	for i, service := range services {
-		result[i] = Service(service)
+		result[i] = Service(service, admin)
 	}
 	return result
 }

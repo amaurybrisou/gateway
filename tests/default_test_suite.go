@@ -113,7 +113,7 @@ func (s *DefaultTestSuite) SetupSuite() {
 		},
 	})
 
-	r := src.Router(services, s.DB, 10, 10)
+	r := src.Router(services, s.DB, "", 10, 10)
 
 	lcore := ablib.NewCore(
 		ablib.WithMigrate(

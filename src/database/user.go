@@ -120,11 +120,12 @@ func (d *Database) GetFullUserByExternalID(ctx context.Context, externalID strin
 	return user, nil
 }
 
-func (d Database) GetUserServices(ctx context.Context, userID uuid.UUID) ([]models.Service, error) {
+func (d Database) GetUserServices(ctx context.Context, userID uuid.UUID) ([]*models.Service, error) {
 	query := `
-		SELECT s.*
-		FROM service s
-		INNER JOIN user_role ur ON ur.user_id = $1 AND ur.role = ANY(s.required_roles)`
+	SELECT s.id, s.name, s.description, s.status, s.prefix, s.image_url, s.created_at, required_roles, CASE WHEN ur.user_id IS NOT NULL OR s.required_roles = '{}' THEN true ELSE false END AS has_access
+	FROM service s
+	LEFT JOIN user_role ur ON ur.user_id = $1 AND ur.role = ANY(s.required_roles) WHERE s.deleted_at IS NULL;
+	`
 
 	rows, err := d.db.Query(ctx, query, userID)
 	if err != nil {
@@ -132,16 +133,15 @@ func (d Database) GetUserServices(ctx context.Context, userID uuid.UUID) ([]mode
 	}
 	defer rows.Close()
 
-	var services []models.Service
+	var services []*models.Service
 	for rows.Next() {
 		var service models.Service
 		if err := rows.Scan(
-			&service.ID, &service.Name, &service.Prefix, &service.RequiredRoles,
-			&service.CreatedAt, &service.UpdatedAt, &service.DeletedAt,
+			&service.ID, &service.Name, &service.Description, &service.Status, &service.Prefix, &service.ImageURL, &service.CreatedAt, &service.RequiredRoles, &service.HasAccess,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan user service: %w", err)
 		}
-		services = append(services, service)
+		services = append(services, &service)
 	}
 
 	if err := rows.Err(); err != nil {

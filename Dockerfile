@@ -22,10 +22,18 @@ RUN export "GOOS=$(echo "$TARGETPLATFORM" | cut -d/ -f1)"; \
     " \
     -o ./backend cmd/gateway/main.go
 
+FROM node:alpine AS frontend
+
+WORKDIR /app
+COPY ./front /app
+RUN npm install
+RUN NODE_ENV=production npm run build
+
 FROM --platform=$TARGETPLATFORM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /app/backend /app/backend
 COPY --from=builder /app/migrations /app/migrations
+COPY --from=frontend /app/build /app/build
 
 CMD ["/app/backend"]

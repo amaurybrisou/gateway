@@ -36,6 +36,10 @@ build:
 		-X 'github.com/amaurybrisou/gateway/src.BuildTime=$(shell date)'" \
 		-o $(GOBIN)/backend cmd/gateway/main.go 
 
+.PHONY: build-docker
+build-docker:
+	NODE_ENV=production docker build --platform linux/amd64 -t "docker.io/brisouamaury/gateway:latest" --push .
+
 .data/adminer-save:
 	mkdir -p $@ && chmod o+w $@
 
