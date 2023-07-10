@@ -4,7 +4,9 @@
 
 * A `/healtcheck` endpoint
 * Correct Logging tracing `X-Request-Id` is mandatory (`X-Real-IP` is also correctly set by the proxy if you need)
-* A unique name
+* The proxy also forward a specific field name `X-Plan-Metadata` containing the metadata defined in the bought product price. Doing so helps the service taking decisions based on the plan/product the user bought.
+* The gateway also forward the stripe customer id in : `X-Stripe-Customer-Id`
+* A unique name not containing any space or special character. it'll be your service slug
 * A Dockerfile building a standalone container (if you need a database, embed it in your docker)
 
 ## Deployments

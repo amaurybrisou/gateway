@@ -8,19 +8,21 @@ import (
 )
 
 type UserRole struct {
-	UserID         uuid.UUID  `json:"user"`
-	SubscriptionID string     `json:"subscription_id"`
-	Role           Role       `json:"role"`
-	ExpiresAt      *time.Time `json:"expires_at"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      *time.Time `json:"updated_at"`
-	DeletedAt      *time.Time `json:"deleted_at"`
+	UserID         uuid.UUID         `json:"user"`
+	SubscriptionID string            `json:"subscription_id"`
+	Role           Role              `json:"role"`
+	Metadata       map[string]string `json:"metadata"`
+	ExpiresAt      *time.Time        `json:"expires_at"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      *time.Time        `json:"updated_at"`
+	DeletedAt      *time.Time        `json:"deleted_at"`
 }
 
 type Role string
 
 const (
 	EmptyRole Role = "{}"
+	TempRole  Role = "{'temporary-role'}"
 )
 
 type Service struct {

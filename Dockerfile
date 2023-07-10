@@ -12,7 +12,7 @@ ARG BUILD_TIME
 RUN export "GOOS=$(echo "$TARGETPLATFORM" | cut -d/ -f1)"; \
     export "GOARCH=$(echo "$TARGETPLATFORM" | cut -d/ -f2)"; \
     export CGO_ENABLED=0; \
-    go build \
+    ENV=production go build \
     -ldflags "-s -w \
     -X 'github.com/amaurybrisou/gateway/src.BuildHash=$BUILD_VERSION' \
     -X 'github.com/amaurybrisou/gateway/src.BuildHash=$BUILD_HASH' \

@@ -101,6 +101,25 @@ func (d *Database) GetFullUserByEmail(ctx context.Context, userEmail string) (mo
 	return user, nil
 }
 
+func (d *Database) GetFullUserByExternalID(ctx context.Context, externalID string) (models.User, error) {
+	query := `
+		SELECT ` + userSelectFieldsFull + `
+		FROM "user"
+		WHERE external_id = $1 AND deleted_at IS NULL
+	`
+
+	row := d.db.QueryRow(ctx, query, externalID)
+	user, err := scanUserFull(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.User{}, nil
+		}
+		return models.User{}, err
+	}
+
+	return user, nil
+}
+
 func (d Database) GetUserServices(ctx context.Context, userID uuid.UUID) ([]models.Service, error) {
 	query := `
 		SELECT s.*

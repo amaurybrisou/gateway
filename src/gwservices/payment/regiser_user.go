@@ -2,44 +2,31 @@ package payment
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/amaurybrisou/ablib"
 	"github.com/amaurybrisou/ablib/cryptlib"
 	coremodels "github.com/amaurybrisou/ablib/models"
 	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
-	"github.com/stripe/stripe-go/v72"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s Service) customerCreated(ctx context.Context, event json.RawMessage) (models.User, error) {
-	var customer stripe.Customer
-	err := json.Unmarshal(event, &customer)
-	if err != nil {
-		return models.User{}, fmt.Errorf("creating user: %w", err)
-	}
-
-	user, err := s.RegisterUser(ctx, &customer)
-	if err != nil {
-		return models.User{}, fmt.Errorf("creating user: %w", err)
-	}
-
-	return user, nil
-}
-
-func (s Service) RegisterUser(ctx context.Context, customer *stripe.Customer) (models.User, error) {
+func (s Service) RegisterUser(ctx context.Context, id, email, name string) (models.User, error) {
 	password, err := cryptlib.GenerateRandomPassword(16)
 	if err != nil {
 		return models.User{}, err
 	}
 
-	fmt.Println(strings.Repeat("#", 100))
-	fmt.Println("Password:", password)
-	fmt.Println(strings.Repeat("#", 100))
+	env := ablib.LookupEnv("ENV", "dev")
+	if env == "dev" {
+		fmt.Println(strings.Repeat("#", 100))
+		fmt.Println("Password:", password)
+		fmt.Println(strings.Repeat("#", 100))
+	}
 
 	hashedPassword, err := cryptlib.GenerateHash(password, bcrypt.DefaultCost)
 	if err != nil {
@@ -48,9 +35,9 @@ func (s Service) RegisterUser(ctx context.Context, customer *stripe.Customer) (m
 
 	u := models.User{
 		ID:         uuid.New(),
-		ExternalID: customer.ID,
-		Email:      customer.Email,
-		Firstname:  customer.Name,
+		ExternalID: id,
+		Email:      email,
+		Firstname:  name,
 		Password:   hashedPassword,
 		Role:       coremodels.USER,
 		CreatedAt:  time.Now(),
@@ -62,7 +49,7 @@ func (s Service) RegisterUser(ctx context.Context, customer *stripe.Customer) (m
 	}
 
 	go func() {
-		if s.mailcli != nil {
+		if s.mailcli != nil && env == "prod" {
 			err := s.mailcli.SendPasswordEmail(u.Email, hashedPassword)
 			if err != nil {
 				log.Ctx(ctx).Error().Err(err).Msg("error sending auto generated password email")

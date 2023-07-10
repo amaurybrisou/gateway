@@ -3,8 +3,8 @@ module github.com/amaurybrisou/gateway
 go 1.20
 
 require (
-	github.com/amaurybrisou/ablib v0.0.0-20230705122649-6fac5196e7db
-	github.com/docker/docker v24.0.2+incompatible
+	github.com/amaurybrisou/ablib v0.0.0-20230710021514-a599fa90bf7b
+	github.com/docker/docker v24.0.4+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/google/uuid v1.3.0
@@ -15,7 +15,7 @@ require (
 	github.com/rs/zerolog v1.29.1
 	github.com/stretchr/testify v1.8.4
 	github.com/stripe/stripe-go/v72 v72.122.0
-	golang.org/x/crypto v0.10.0
+	golang.org/x/crypto v0.11.0
 	golang.org/x/time v0.3.0
 )
 
@@ -65,11 +65,11 @@ require (
 	go.mongodb.org/mongo-driver v1.12.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/mod v0.12.0 // indirect
-	golang.org/x/net v0.11.0 // indirect
+	golang.org/x/net v0.12.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect
 	golang.org/x/sys v0.10.0 // indirect
 	golang.org/x/text v0.11.0 // indirect
-	golang.org/x/tools v0.10.0 // indirect
+	golang.org/x/tools v0.11.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

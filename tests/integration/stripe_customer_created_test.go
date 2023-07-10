@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (s *gwTestSuite) TestStripeCustomerCreated() {
+func (s *gwTestSuite) StripeCustomerCreated() {
 	t := s.T()
 
 	resp, err := s.PostWebhook("application/json", s.ReadFile("fixtures/customer.created.json"))

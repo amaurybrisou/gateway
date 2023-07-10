@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httputil"
@@ -54,7 +55,7 @@ func (s Proxy) ProxyHandler(host, pathPrefix string, w http.ResponseWriter, r *h
 				req.Header.Add("X-Request-Id", middleware.GetReqID(req.Context()))
 				req.Header.Add("X-Forwarded-For", req.RemoteAddr)
 				req.Host = targetURL.Host
-				log.Ctx(r.Context()).Debug().Any("url", r.URL).Any("host", r.Host).Msg("prosying to")
+				log.Ctx(r.Context()).Debug().Any("url", r.URL).Any("host", r.Host).Msg("proxying to")
 			},
 		}
 
@@ -94,17 +95,29 @@ func (p Proxy) CheckRequiredRoles(service models.Service, next http.Handler) htt
 			return
 		}
 
-		hasRole, err := p.db.HasRole(r.Context(), userID, service.RequiredRoles...)
+		userRole, err := p.db.GetUserRole(r.Context(), userID, service.RequiredRoles[0])
 		if err != nil {
 			log.Ctx(r.Context()).Error().Err(err).Msg("determine user roles")
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
 
-		if !hasRole {
+		if userRole.UserID == uuid.Nil {
 			http.Redirect(w, r, p.noRoleRedirectURL+"/"+service.Name, http.StatusTemporaryRedirect)
 			return
 		}
+
+		m, err := json.Marshal(userRole.Metadata)
+		if err != nil {
+			log.Ctx(r.Context()).Error().Err(err).Msg("marshal metadata")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		r.Header.Add("X-Plan-Metadata", string(m))
+
+		user := coremiddleware.User(r.Context())
+		r.Header.Add("X-Stripe-Customer-ID", user.GetExternalID())
 
 		next.ServeHTTP(w, r)
 	})

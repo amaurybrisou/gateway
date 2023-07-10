@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/amaurybrisou/ablib/jwtlib"
@@ -53,11 +51,12 @@ func NewService(db *database.Database, jwt *jwtlib.JWT, mail *mailcli.MailClient
 	}
 }
 
-func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) { //nolint
+func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	// Read the request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to read request body")
+		log.Ctx(ctx).Error().Err(err).Msg("failed to read request body")
 		http.Error(w, "failed to read request body", http.StatusInternalServerError)
 		return
 	}
@@ -65,7 +64,7 @@ func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) { //nolin
 	// Verify and parse the webhook event
 	event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), s.webHookSecret)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to verify webhook event")
+		log.Ctx(ctx).Error().Err(err).Msg("failed to verify webhook event")
 		http.Error(w, "failed to verify webhook event", http.StatusBadRequest)
 		return
 	}
@@ -73,46 +72,29 @@ func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) { //nolin
 	var sessionEvent stripe.Event
 	err = json.Unmarshal(event.Data.Raw, &sessionEvent)
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to unmarshal checkout session event")
+		log.Ctx(ctx).Error().Err(err).Msg("failed to unmarshal stripe event")
 		http.Error(w, "failed to process webhook event", http.StatusInternalServerError)
 		return
 	}
 
+	log.Ctx(ctx).Debug().Any("event_type", event.Type).Msg("stripe wehbook handler")
+
 	// https://stripe.com/docs/api/events/types.
 	switch event.Type {
-	case "invoice.payment_succeeded":
-	case "customer.created":
-		user, err := s.customerCreated(r.Context(), event.Data.Raw)
-		if err != nil {
-			log.Ctx(r.Context()).Error().Err(err).Msg("creating user")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		log.Ctx(r.Context()).Info().
-			Any("user_id", user.ID).
-			Any("customer_id", user.ExternalID).
-			Msg("new user created")
-
-		json.NewEncoder(w).Encode(user) //nolint
 	case "checkout.session.completed":
+		// Payment is successful and the subscription is created.
+		// You should provision the subscription and save the customer ID to your database.
 		var session stripe.CheckoutSession
 		err := json.Unmarshal(event.Data.Raw, &session)
 		if err != nil {
-			log.Ctx(r.Context()).Error().Err(err).Msg("unmarshal checkout session")
+			log.Ctx(ctx).Error().Err(err).Msg("failed to unmarshal checkout session")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		user, err := s.db.GetFullUserByEmail(r.Context(), session.CustomerDetails.Email)
+		user, err := s.RegisterUser(ctx, session.Customer.ID, session.CustomerDetails.Email, session.CustomerDetails.Name)
 		if err != nil {
-			log.Ctx(r.Context()).Error().Err(err).Msg("get user by email")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if user.ID != uuid.Nil {
-			log.Ctx(r.Context()).Error().Err(errors.New("user not found")).Send()
+			log.Ctx(ctx).Error().Err(err).Msg("failed to unmarshal checkout session")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -120,12 +102,12 @@ func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) { //nolin
 		serviceIDstring := session.ClientReferenceID
 		serviceID, err := uuid.Parse(serviceIDstring)
 		if err != nil {
-			log.Ctx(r.Context()).Error().Err(err).Msg("failed parse client_reference_id")
+			log.Error().Err(err).Msg("failed parse client_reference_id")
 			http.Error(w, "failed parse client_reference_id", http.StatusInternalServerError)
 			return
 		}
 
-		service, err := s.db.GetServiceByID(r.Context(), serviceID)
+		service, err := s.db.GetServiceByID(ctx, serviceID)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to fetch service")
 			http.Error(w, "failed to fetch service", http.StatusInternalServerError)
@@ -142,7 +124,7 @@ func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) { //nolin
 			role = service.RequiredRoles[0]
 		}
 
-		_, err = s.db.AddRole(r.Context(), user.ID, subID, role, nil)
+		userRole, err := s.db.AddRole(ctx, user.ID, subID, role, nil)
 		if err != nil {
 			log.Error().Err(err).
 				Any("service", service).
@@ -152,86 +134,74 @@ func (s Service) StripeWebhook(w http.ResponseWriter, r *http.Request) { //nolin
 			return
 		}
 
-		// Payment is successful and the subscription is created.
-		// You should provision the subscription and save the customer ID to your database.
+		json.NewEncoder(w).Encode(userRole) //nolint
 	case "customer.subscription.deleted":
 		var sub stripe.Subscription
 		err := json.Unmarshal(event.Data.Raw, &sub)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
+			log.Ctx(ctx).Error().Err(err).Msg("failed to unmarshal subscription deleted event")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		err = s.DeleteRole(r.Context(), &sub)
+		err = s.DeleteRole(ctx, &sub)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
+			log.Ctx(ctx).Error().Err(err).Msg("failed to unmarshal subscription deleted event")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 	case "customer.subscription.updated":
-		fmt.Fprintf(os.Stderr, "Unhandled event type: %s\n", event.Type)
 		var sub stripe.Subscription
 		err := json.Unmarshal(event.Data.Raw, &sub)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
+			log.Ctx(ctx).Error().Err(err).Msg("failed to unmarshal subscription deleted event")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		switch sub.PauseCollection.Behavior {
-		case "":
-			_, err = s.db.UpdateRoleExpiration(r.Context(), sub.ID, nil)
-			if err != nil {
-				log.Error().Err(err).
-					Any("subscription_id", sub.ID).
-					Msg("failed to update user role")
-				http.Error(w, "failed to update user roles", http.StatusInternalServerError)
-				return
-			}
-		default:
-			currentPeriodendAt := time.Unix(sub.CurrentPeriodEnd, 0)
-			_, err = s.db.UpdateRoleExpiration(r.Context(), sub.ID, &currentPeriodendAt)
-			if err != nil {
-				log.Error().Err(err).
-					Any("subscription_id", sub.ID).
-					Any("ends_at", currentPeriodendAt).
-					Msg("failed to update user role")
-				http.Error(w, "failed to update user roles", http.StatusInternalServerError)
-				return
-			}
+		items := sub.Items.Data
+		if len(items) != 1 {
+			return
+		}
+
+		metaData := items[0].Plan.Metadata
+
+		currentPeriodendAt := time.Unix(sub.CurrentPeriodEnd, 0)
+		_, err = s.db.UpdateRole(ctx, sub.ID, metaData, &currentPeriodendAt)
+		if err != nil {
+			log.Error().Err(err).
+				Any("subscription_id", sub.ID).
+				Any("ends_at", currentPeriodendAt).
+				Msg("failed to update user role")
+			http.Error(w, "failed to update user roles", http.StatusInternalServerError)
+			return
 		}
 
 	case "subscription_schedule.canceled":
-		fmt.Fprintf(os.Stderr, "Unhandled event type: %s\n", event.Type)
 		var subSchedule stripe.SubscriptionSchedule
 		err := json.Unmarshal(event.Data.Raw, &subSchedule)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
+			log.Ctx(ctx).Error().Err(err).Msg("failed to unmarshal subscription canceled event")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		err = s.DeleteRole(r.Context(), subSchedule.Subscription)
+		err = s.DeleteRole(ctx, subSchedule.Subscription)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
+			log.Ctx(ctx).Error().Err(err).Msg("failed to unmarshal subscription canceled event")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "Unhandled event type: %s\n", event.Type)
 	}
 
-	// Return a success response to Stripe
 	w.WriteHeader(http.StatusOK)
 }
 
 func (s Service) DeleteRole(ctx context.Context, sub *stripe.Subscription) error {
 	deleted, err := s.db.DelRoleBySubscriptionID(ctx, sub.ID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
-
 		return err
 	}
 

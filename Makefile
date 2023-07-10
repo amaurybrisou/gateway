@@ -20,7 +20,7 @@ lint:
 .PHONY: test
 test:
 	@echo "> Test backend..."
-	@go test -count=1 -timeout 3m -v ./...
+	ENV=test go test -count=1 -timeout 3m -v ./...
 
 .PHONY: config
 config:
