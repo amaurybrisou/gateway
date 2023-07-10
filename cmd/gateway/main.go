@@ -2,151 +2,155 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"net/http"
+	"os"
+	"time"
 
-	"github.com/amaurybrisou/gateway/internal/db"
-	"github.com/amaurybrisou/gateway/internal/db/models"
-	"github.com/amaurybrisou/gateway/internal/services"
-	"github.com/amaurybrisou/gateway/pkg/core"
-	"github.com/amaurybrisou/gateway/pkg/core/store"
-	coremiddleware "github.com/amaurybrisou/gateway/pkg/http/middleware"
-	"github.com/gorilla/mux"
+	"github.com/amaurybrisou/ablib"
+	"github.com/amaurybrisou/ablib/jwtlib"
+	"github.com/amaurybrisou/ablib/mailcli"
+	"github.com/amaurybrisou/ablib/store"
+	"github.com/amaurybrisou/gateway/src"
+	"github.com/amaurybrisou/gateway/src/database"
+	"github.com/amaurybrisou/gateway/src/gwservices"
+	"github.com/amaurybrisou/gateway/src/gwservices/payment"
+	"github.com/amaurybrisou/gateway/src/gwservices/proxy"
+	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 func main() {
-	core.Logger()
+	loglevel, err := zerolog.ParseLevel(ablib.LookupEnv("LOG_LEVEL", "debug"))
+	if err != nil {
+		fmt.Println("invalid LOG_LEVEL")
+		os.Exit(1)
+	}
+	zerolog.SetGlobalLevel(loglevel)
 
-	// cfg := config.New()
+	ablib.Logger(ablib.LookupEnv("LOG_FORMAT", "json"))
 
 	ctx := log.Logger.WithContext(context.Background())
 
-	dbUrl := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
-		core.LookupEnv("DB_USERNAME", "gateway"),
-		core.LookupEnv("DB_PASSWORD", "gateway"),
-		core.LookupEnv("DB_HOST", "localhost"),
-		core.LookupEnvInt("DB_PORT", 5432),
-		core.LookupEnv("DB_DATABASE", "gateway"),
+	defer func() {
+		if r := recover(); r != nil {
+			log.Ctx(ctx).Info().Any("recover", r).Send()
+		}
+	}()
+
+	log.Ctx(ctx).Info().
+		Any("build_version", src.BuildVersion).
+		Any("build_hash", src.BuildHash).
+		Any("build_time", src.BuildTime).
+		Send()
+
+	postgres := store.NewPostgres(ctx,
+		ablib.LookupEnv("DB_USERNAME", "gateway"),
+		ablib.LookupEnv("DB_PASSWORD", "gateway"),
+		ablib.LookupEnv("DB_HOST", "localhost"),
+		ablib.LookupEnvInt("DB_PORT", 5432),
+		ablib.LookupEnv("DB_DATABASE", "gateway"),
+		ablib.LookupEnv("DB_SSL_MODE", "disable"),
 	)
 
-	mig := core.WithMigrate(
-		core.LookupEnv("DB_MIGRATIONS_PATH", "file://migrations"),
-		dbUrl,
-	)
+	db := database.New(postgres)
 
-	if err := mig.Start(ctx); err != nil {
-		log.Ctx(ctx).Fatal().Err(err).Send()
-	}
+	domain := ablib.LookupEnv("DOMAIN", "http://localhost:8089")
 
-	postgres, err := store.NewPostgres(ctx, dbUrl)
-	if err != nil {
-		log.Ctx(ctx).Fatal().Err(err).Send()
-	}
-
-	db := db.New(postgres)
-
-	services := services.NewServices(db)
-
-	r := router(services, db)
-
-	err = core.Run(
+	mail, err := mailcli.NewMailClient(
 		ctx,
-		core.WithLogLevel(core.LookupEnv("LOG_LEVEL", "debug")),
-		core.WithHTTPServer(
-			core.LookupEnv("HTTP_SERVER_ADDR", "0.0.0.0"),
-			core.LookupEnvInt("HTTP_SERVER_PORT", 8089),
-			r,
-		),
-		core.WithPrometheus(
-			core.LookupEnv("HTTP_PROM_ADDR", "0.0.0.0"),
-			core.LookupEnvInt("HTTP_PROM_PORT", 2112),
-		),
+		mailcli.WithMailClientOptionSenderEmail(ablib.LookupEnv("SENDER_EMAIL", "gateway@gateway.org")),
+		mailcli.WithMailClientOptionSenderPassword(ablib.LookupEnv("SENDER_PASSWORD", "default-password")),
 	)
-
 	if err != nil {
-		log.Ctx(ctx).Fatal().Err(err).Msg("shutting down")
+		log.Ctx(ctx).Fatal().Err(err).Msg("creating mail client")
+		return
 	}
-}
 
-func router(s services.Services, db *db.Database) http.Handler {
-
-	r := mux.NewRouter()
-
-	r.Use(coremiddleware.RequestMetric("gateway"))
-	r.Use(coremiddleware.Logger(log.Logger))
-	r.Use(coremiddleware.JsonContentType())
-
-	authMiddleware := coremiddleware.NewAuthMiddleware(
-		db,
-		[]string{
-			"/",
-			"/auth/google",
-			"/auth/google/callback",
-			"/services",
+	services := gwservices.NewServices(db, mail, gwservices.ServiceConfig{
+		PaymentConfig: payment.Config{
+			StripeKey:           ablib.LookupEnv("STRIPE_KEY", ""),
+			StripeSuccessURL:    ablib.LookupEnv("STRIPE_SUCCESS_URL", domain+"/login"),
+			StripeCancelURL:     ablib.LookupEnv("STRIPE_CANCEL_URL", domain),
+			StripeWebHookSecret: ablib.LookupEnv("STRIPE_WEBHOOK_SECRET", ""),
 		},
-	)
-
-	r.Use(func(h http.Handler) http.Handler { return authMiddleware.BearerAuth(h, db.GetUserByAccessToken) })
-
-	// unauthenticated
-	// r.HandleFunc("/", rootHandler(db))
-	r.HandleFunc("/auth/{provider}", s.Oauth().AuthHandler)
-	r.HandleFunc("/auth/{provider}/callback", s.Oauth().CallBackHandler)
-	r.HandleFunc("/services", s.Service().GetAllServicesHandler).Methods(http.MethodGet)
-
-	// require authentication
-	r.HandleFunc("/logout/{provider}", s.Oauth().LogoutHandler)
-	
-	adminRouter := r.NewRoute().Subrouter()
-	adminRouter.Use(func(h http.Handler) http.Handler {
-		return authMiddleware.IsAdmin(h)
+		JwtConfig: jwtlib.Config{
+			SecretKey: ablib.LookupEnv("JWT_KEY", "insecure-key"),
+			Issuer:    ablib.LookupEnv("JWT_ISSUER", domain),
+			Audience:  ablib.LookupEnv("JWT_AUDIENCE", "insecure-key"),
+		},
+		ProxyConfig: proxy.Config{
+			StripPrefix:         "",
+			NotFoundRedirectURL: "/services",
+			NoRoleRedirectURL:   "/pricing",
+		},
 	})
 
-	adminRouter.HandleFunc("/services", s.Service().CreateServiceHandler).Methods(http.MethodPost)
-	adminRouter.HandleFunc("/services", s.Service().DeleteServiceHandler).Methods(http.MethodDelete)
+	r := src.Router(services, db,
+		ablib.LookupEnvFloat64("RATE_LIMIT", float64(5)),
+		ablib.LookupEnvInt("RATE_LIMIT_BURST", 10),
+	)
 
-	r.PathPrefix("/").Handler(s.Proxy().ProxyHandler(rootHandler(db)))
+	lcore := ablib.NewCore(
+		ablib.WithMigrate(
+			ablib.LookupEnv("DB_MIGRATIONS_PATH", "file://migrations"),
+			postgres.Config().ConnString(),
+		),
+		ablib.WithLogLevel(ablib.LookupEnv("LOG_LEVEL", "debug")),
+		ablib.WithHTTPServer(
+			ablib.LookupEnv("HTTP_SERVER_ADDR", "0.0.0.0"),
+			ablib.LookupEnvInt("HTTP_SERVER_PORT", 8089),
+			r,
+		),
+		ablib.WithSignals(),
+		ablib.WithPrometheus(
+			ablib.LookupEnv("HTTP_PROM_ADDR", "0.0.0.0"),
+			ablib.LookupEnvInt("HTTP_PROM_PORT", 2112),
+		),
+		ablib.HeartBeat(
+			ablib.WithRequestPath("/healthcheck"),
+			ablib.WithClientTimeout(5*time.Second),
+			ablib.WithInterval(ablib.LookupEnvDuration("HEARTBEAT_INTERVAL", "10s")),
+			ablib.WithErrorIncrement(ablib.LookupEnvDuration("HEARTBEAT_ERROR_INCREMENT", "5s")),
+			ablib.WithFetchServiceFunction(func(ctx context.Context) ([]ablib.Service, error) {
+				services, err := db.GetServices(ctx)
+				if err != nil {
+					return nil, nil
+				}
+				output := make([]ablib.Service, len(services))
+				for i, s := range services {
+					output[i] = s
+				}
+				return output, nil
+			}),
+			ablib.WithUpdateServiceStatusFunction(func(ctx context.Context, u uuid.UUID, s string) error {
+				return db.UpdateServiceStatus(ctx, u, s)
+			}),
+		),
+	)
 
-	return r
-}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-func rootHandler(db *db.Database) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		servicesList, err := db.GetServices(r.Context())
+	started, errChan := lcore.Start(ctx)
+
+	go func() {
+		<-started
+		log.Ctx(ctx).Debug().Msg("all backend services started")
+	}()
+
+	err = <-errChan
+	if err != nil {
+		if !errors.Is(err, ablib.ErrSignalReceived) {
+			log.Ctx(ctx).Error().Err(err).Msg("error received")
+		}
+		err = lcore.Shutdown(ctx)
 		if err != nil {
-			log.Ctx(r.Context()).Err(err).Send()
-			http.Error(w, "fetch services", http.StatusInternalServerError)
-			return
+			log.Ctx(ctx).Error().Err(err).Msg("shutdown error received")
 		}
-
-		userInt := coremiddleware.User(r.Context())
-		if userInt == nil {
-			if err := json.NewEncoder(w).Encode(struct {
-				Services []models.Service `json:"services"`
-			}{
-				Services: servicesList,
-			}); err != nil {
-				log.Ctx(r.Context()).Err(err).Send()
-				http.Error(w, "error marshaling", http.StatusInternalServerError)
-				return
-			}
-			return
-		}
-
-		user := models.NewUserFromInt(userInt)
-
-		if err := json.NewEncoder(w).Encode(struct {
-			User     models.User      `json:"user"`
-			Services []models.Service `json:"services"`
-		}{
-			User:     user,
-			Services: servicesList,
-		}); err != nil {
-			log.Ctx(r.Context()).Err(err).Send()
-			http.Error(w, "error marshaling", http.StatusInternalServerError)
-			return
-		}
+		log.Ctx(ctx).Debug().Msg("services stopped")
 	}
+
+	log.Ctx(ctx).Debug().Msg("shutdown")
 }

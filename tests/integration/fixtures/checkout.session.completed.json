@@ -1,0 +1,86 @@
+{
+    "type": "checkout.session.completed",
+    "data": {
+        "object": {
+            "id": "cs_test_a1R0ZrQuhyun3rXUrmyjLzJQizknygTFTwAZ2jeFn4Ehs8rr0E5AjJ6E8k",
+            "object": "checkout.session",
+            "after_expiration": null,
+            "allow_promotion_codes": false,
+            "amount_subtotal": 1999,
+            "amount_total": 1999,
+            "automatic_tax": {
+                "enabled": false,
+                "status": null
+            },
+            "billing_address_collection": "auto",
+            "cancel_url": "https://stripe.com",
+            "client_reference_id": "2ea74ace-7f70-4997-9eab-2e5c094543bd",
+            "consent": null,
+            "consent_collection": {
+                "promotions": "none",
+                "terms_of_service": "none"
+            },
+            "created": 1688836181,
+            "currency": "eur",
+            "currency_conversion": null,
+            "custom_fields": [],
+            "custom_text": {
+                "shipping_address": null,
+                "submit": null
+            },
+            "customer": "cus_OE6rs7XfFozLsM",
+            "customer_creation": "always",
+            "customer_details": {
+                "address": {
+                    "city": null,
+                    "country": "FR",
+                    "line1": null,
+                    "line2": null,
+                    "postal_code": null,
+                    "state": null
+                },
+                "email": "amaury.brisou@puzzledge.org",
+                "name": "AMAURY BRISOU",
+                "phone": null,
+                "tax_exempt": "none",
+                "tax_ids": []
+            },
+            "customer_email": null,
+            "expires_at": 1688922581,
+            "invoice": "in_1NRedtGlmycTmuoajtRAMKrs",
+            "invoice_creation": null,
+            "livemode": false,
+            "locale": "en",
+            "metadata": {},
+            "mode": "subscription",
+            "payment_intent": null,
+            "payment_link": null,
+            "payment_method_collection": "always",
+            "payment_method_options": null,
+            "payment_method_types": [
+                "card",
+                "link"
+            ],
+            "payment_status": "paid",
+            "phone_number_collection": {
+                "enabled": false
+            },
+            "recovered_from": null,
+            "setup_intent": null,
+            "shipping": null,
+            "shipping_address_collection": null,
+            "shipping_options": [],
+            "shipping_rate": null,
+            "status": "complete",
+            "submit_type": null,
+            "subscription": "sub_1NRedtGlmycTmuoapsEbBiCx",
+            "success_url": "https://stripe.com",
+            "total_details": {
+                "amount_discount": 0,
+                "amount_shipping": 0,
+                "amount_tax": 0
+            },
+            "url": null
+        }
+    }
+}

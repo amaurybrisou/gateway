@@ -1,7 +1,27 @@
-version: '3'
+version: "3"
 services:
+  backend:
+    platform: linux/amd64
+    build:
+      context: "."
+      args:
+        BUILD_HASH: "local"
+    env_file:
+      - .env
+    environment:
+      - DB_MIGRATIONS_PATH=file://app/migrations
+      - DB_HOST=postgres
+    ports:
+      - "127.0.0.1:8089:8089"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gw_internal
+
   postgres:
     image: postgres:9
+    restart: unless-stopped
     ports:
       - "127.0.0.1:5432:5432"
     environment:
@@ -10,29 +30,55 @@ services:
       - POSTGRES_DB=gateway
     volumes:
       - $PWD/.data/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "psql", "-U", "gateway"]
+      interval: 2s
+      retries: 30
+      timeout: 5s
+      start_period: 5s
+    networks:
+      - gw_internal
 
-  # adminer:
-  #   image: adminer
+  adminer:
+    image: adminer
+    restart: unless-stopped
+    environment:
+      ADMINER_PLUGINS: "tables-filter tinymce edit-calendar"
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: nette
+    ports:
+      - 127.0.0.1:54321:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gw_internal
+
+networks:
+  gw_internal:
+
+  # pgadmin:
+  #   image: dpage/pgadmin4
   #   ports:
-  #     - "127.0.0.1:8080:8080"
+  #     - "127.0.0.1:54321:80"
+  #   environment:
+  #     - PGADMIN_DEFAULT_EMAIL=gateway
+  #     - PGADMIN_DEFAULT_PASSWORD=gateway
+  #   user: "0"
+  #   volumes:
+  #     - $PWD/.data/pgadmin:/var/lib/pgadmin
 
-  pgadmin:
-    image: dpage/pgadmin4
-    ports:
-      - "127.0.0.1:54321:80"
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=gateway
-      - PGADMIN_DEFAULT_PASSWORD=gateway
-    user: "0"
-    volumes:
-      - $PWD/.data/pgadmin:/var/lib/pgadmin
-
-  grafana:
-    image: grafana/grafana
-    ports:
-      - "127.0.0.1:3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - $PWD/.data/grafana:/var/lib/grafana
+  # grafana:
+  #   image: grafana/grafana
+  #   restart: unless-stopped
+  #   ports:
+  #     - "127.0.0.1:3000:3000"
+  #   user: "1000"
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #   volumes:
+  #     - $PWD/.data/grafana:/var/lib/grafana
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
