@@ -3,11 +3,13 @@ package database
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/lib/pq"
 )
 
@@ -44,6 +46,10 @@ func (d Database) GetUserRole(ctx context.Context, userID uuid.UUID, serviceRole
 	var role models.UserRole
 	err := d.db.QueryRow(ctx, query, userID, serviceRole).Scan(&role.UserID, &role.SubscriptionID, &role.Role, &role.Metadata, &role.ExpiresAt)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.UserRole{}, nil
+		}
+
 		return role, fmt.Errorf("failed to check user role: %w", err)
 	}
 
