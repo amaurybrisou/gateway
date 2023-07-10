@@ -9,6 +9,8 @@ ARG BUILD_VERSION
 ARG BUILD_HASH
 ARG BUILD_TIME
 
+RUN apk --no-cache add ca-certificates
+
 RUN export "GOOS=$(echo "$TARGETPLATFORM" | cut -d/ -f1)"; \
     export "GOARCH=$(echo "$TARGETPLATFORM" | cut -d/ -f2)"; \
     export CGO_ENABLED=0; \
@@ -22,6 +24,8 @@ RUN export "GOOS=$(echo "$TARGETPLATFORM" | cut -d/ -f1)"; \
 
 FROM --platform=$TARGETPLATFORM scratch
 
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /app/backend /app/backend
 COPY --from=builder /app/migrations /app/migrations
+
 CMD ["/app/backend"]
