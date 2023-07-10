@@ -53,8 +53,12 @@ func (s Service) RegisterUser(ctx context.Context, id, email, name string) (mode
 			err := s.mailcli.SendPasswordEmail(u.Email, hashedPassword)
 			if err != nil {
 				log.Ctx(ctx).Error().Err(err).Msg("error sending auto generated password email")
+				fmt.Println(strings.Repeat("#", 100))
+				fmt.Println("Password:", password)
+				fmt.Println(strings.Repeat("#", 100))
+				return
 			}
-			log.Ctx(ctx).Debug().Any("email", u.Email).Msg("auto generated pasword email send")
+			log.Ctx(ctx).Debug().Any("email", u.Email).Msg("auto generated password email sent")
 		}
 	}()
 
