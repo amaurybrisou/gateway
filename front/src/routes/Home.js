@@ -1,12 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { getServices } from '../svc/svc';
-import Service from './Service';
 
-const  HomePage =  () => {
- const [services, setServices] = useState([])
+import { useEffect, useState } from 'react';
+import Service from '../components/service';
+import { API_URL } from '../constants';
 
- useEffect( () => {
-    getServices().then(setServices).catch(console.log)
+const getServices = async () => {
+  const response = await fetch(API_URL + '/services');
+
+  if (response.ok) {
+    const data = await response.json();
+    return data;
+  }
+
+  return [];
+};
+
+export default function Home() {
+ const [services, setServices] =  useState([])
+
+ useEffect(()=>{
+  getServices().then(setServices)
  }, [])
 
   return (
@@ -35,4 +47,3 @@ const  HomePage =  () => {
   );
 }
 
-export default HomePage;

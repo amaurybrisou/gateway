@@ -1,6 +1,6 @@
 'use client'
+import { useUser } from "@/context/user";
 import { useState } from "react";
-import { useUser } from "../context/user";
 
 export default function Login() {
   const [errorMsg, setErrorMsg] = useState("");

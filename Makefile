@@ -26,7 +26,6 @@ test:
 config:
 	cp .env.default .env
 
-
 .PHONY: build
 build:
 	@echo "> Build backend..."

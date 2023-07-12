@@ -1,6 +1,4 @@
-import React from "react";
-
-function Service({ name, description, image, has_access, status, is_free }) {
+export default function Service({ name, description, image, has_access, status, is_free }) {
   const getStatusColor = () => {
     if (status === "OK") {
       return "bg-green-300";
@@ -54,10 +52,8 @@ function Service({ name, description, image, has_access, status, is_free }) {
   };
 
   return (
-    (isActive && <a href={`${window.location}api/${has_access ? "" : "pricing/"}${name}`}>
+    (isActive && <a targe="_blank" href={`/${has_access ? "" : "pricing/"}${name}`}>
       {displayService()}
     </a>) || displayService()
   );
 }
-
-export default Service;

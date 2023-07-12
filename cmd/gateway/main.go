@@ -87,11 +87,7 @@ func main() {
 		},
 	})
 
-	r := src.Router(services, db,
-		ablib.LookupEnv("FRONT_BUILD_PATH", "front/dist"),
-		ablib.LookupEnvFloat64("RATE_LIMIT", float64(5)),
-		ablib.LookupEnvInt("RATE_LIMIT_BURST", 10),
-	)
+	r := src.Router(services, db)
 
 	lcore := ablib.NewCore(
 		ablib.WithMigrate(

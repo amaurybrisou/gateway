@@ -29,6 +29,7 @@ func (d Database) CreateService(ctx context.Context, s models.Service) (models.S
 		host = excluded.host,
 		required_roles = excluded.required_roles,
 		image_url = excluded.image_url,
+		description = excluded.description,
 		pricing_table_key = excluded.pricing_table_key,
 		pricing_table_publishable_key = excluded.pricing_table_publishable_key
 	RETURNING ` + serviceSelectFieldsFull

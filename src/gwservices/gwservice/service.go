@@ -5,10 +5,9 @@ import (
 	"errors"
 	"net/http"
 	"text/template"
-	"time"
 
 	"github.com/amaurybrisou/ablib/cryptlib"
-	coremiddleware "github.com/amaurybrisou/ablib/http/middleware"
+	ablibhttp "github.com/amaurybrisou/ablib/http"
 	"github.com/amaurybrisou/ablib/jwtlib"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/database/models"
@@ -48,7 +47,7 @@ func (s Service) CreateServiceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(serializer.Service(&createdService, coremiddleware.IsAdmin(r.Context()))); err != nil {
+	if err := json.NewEncoder(w).Encode(serializer.Service(&createdService, ablibhttp.IsAdmin(r.Context()))); err != nil {
 		log.Ctx(r.Context()).Err(err).Send()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -93,7 +92,7 @@ func (s Service) DeleteServiceHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s Service) GetAllServicesHandler(w http.ResponseWriter, r *http.Request) {
-	user := coremiddleware.User(r.Context())
+	user := ablibhttp.User(r.Context())
 	var services []*models.Service
 	var err error
 	if user != nil {
@@ -107,7 +106,7 @@ func (s Service) GetAllServicesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(serializer.Services(services, coremiddleware.IsAdmin(r.Context()))); err != nil {
+	if err := json.NewEncoder(w).Encode(serializer.Services(services, ablibhttp.IsAdmin(r.Context()))); err != nil {
 		log.Ctx(r.Context()).Err(err).Send()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -143,7 +142,11 @@ func (s Service) ServicePricePage(w http.ResponseWriter, r *http.Request) {
 			<script async src="https://js.stripe.com/v3/pricing-table.js"></script>
 			<stripe-pricing-table pricing-table-id="{{.service.PricingTableKey}}"
 				publishable-key="{{.service.PricingTablePublishableKey}}"
-				client-reference-id="{{.service.ID}}"				
+				client-reference-id="{{.service.ID}}"
+				{{if .user}}
+					customer-email="{{.user.Email}}"
+					customer-id="{{.user.ID}}"
+				{{end}}		
 				>
 			</stripe-pricing-table>
 		</body>
@@ -157,7 +160,7 @@ func (s Service) ServicePricePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := coremiddleware.User(r.Context())
+	user := ablibhttp.User(r.Context())
 
 	// Execute the template with the list of services
 	w.Header().Set("Content-Type", "text/html")
@@ -171,46 +174,46 @@ func (s Service) ServicePricePage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s Service) PostLoginHandler(w http.ResponseWriter, r *http.Request) {
-	type Credentials struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	// Parse the request body into a Credentials struct
-	var creds Credentials
-	err := json.NewDecoder(r.Body).Decode(&creds)
-	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("Invalid request body")
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
+// func (s Service) PostLoginHandler(w http.ResponseWriter, r *http.Request) {
+// 	type Credentials struct {
+// 		Email    string `json:"email"`
+// 		Password string `json:"password"`
+// 	}
+// 	// Parse the request body into a Credentials struct
+// 	var creds Credentials
+// 	err := json.NewDecoder(r.Body).Decode(&creds)
+// 	if err != nil {
+// 		log.Ctx(r.Context()).Error().Err(err).Msg("Invalid request body")
+// 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+// 		return
+// 	}
 
-	user, err := s.db.GetUserByEmail(r.Context(), creds.Email)
-	if err != nil && !errors.Is(err, database.ErrUserNotFound) {
-		log.Ctx(r.Context()).Error().Err(err).Msg("internal error")
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
+// 	user, err := s.db.GetUserByEmail(r.Context(), creds.Email)
+// 	if err != nil && !errors.Is(err, database.ErrUserNotFound) {
+// 		log.Ctx(r.Context()).Error().Err(err).Msg("internal error")
+// 		http.Error(w, "internal error", http.StatusInternalServerError)
+// 		return
+// 	}
 
-	if user.ID == uuid.Nil || !cryptlib.ValidateHash(creds.Password, user.Password) {
-		log.Ctx(r.Context()).Error().Err(err).Msg("invalid credentials")
-		http.Error(w, "invalid credentials", http.StatusUnauthorized)
-		return
-	}
+// 	if user.ID == uuid.Nil || !cryptlib.ValidateHash(creds.Password, user.Password) {
+// 		log.Ctx(r.Context()).Error().Err(err).Msg("invalid credentials")
+// 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+// 		return
+// 	}
 
-	// Generate a JWT token with a subject and expiration time
-	token, err := s.jwt.GenerateToken(user.ID.String(), time.Now().Add(time.Hour), time.Now())
-	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to generate")
-		http.Error(w, "failed to generate token", http.StatusInternalServerError)
-		return
-	}
+// 	// Generate a JWT token with a subject and expiration time
+// 	token, err := s.jwt.GenerateToken(user.ID.String(), time.Now().Add(time.Hour), time.Now())
+// 	if err != nil {
+// 		log.Ctx(r.Context()).Error().Err(err).Msg("failed to generate")
+// 		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+// 		return
+// 	}
 
-	// Return the token as the response
-	response := map[string]string{"token": token}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response) //nolint
-}
+// 	// Return the token as the response
+// 	response := map[string]string{"token": token}
+// 	w.Header().Set("Content-Type", "application/json")
+// 	json.NewEncoder(w).Encode(response) //nolint
+// }
 
 // PasswordUpdateHandler is an HTTP handler for updating the user password.
 func (s Service) PasswordUpdateHandler(w http.ResponseWriter, r *http.Request) {
@@ -251,7 +254,7 @@ func (s Service) PasswordUpdateHandler(w http.ResponseWriter, r *http.Request) {
 // GetUserHandler is an HTTP handler for retrieving user information.
 func (s Service) GetUserHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract the user ID from the request context
-	userID := coremiddleware.User(r.Context()).GetID()
+	userID := ablibhttp.User(r.Context()).GetID()
 
 	// Retrieve the user from the database
 	user, err := s.db.GetUserByID(r.Context(), userID)

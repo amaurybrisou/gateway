@@ -110,6 +110,10 @@ func (u User) GetEmail() string {
 	return u.Email
 }
 
+func (u User) GetPassword() string {
+	return u.Password
+}
+
 func (u User) GetAvatarURL() string {
 	return u.AvatarURL
 }
@@ -124,10 +128,6 @@ func (u User) GetLastname() string {
 
 func (u User) GetRole() coremodels.GatewayRole {
 	return u.Role
-}
-
-func (u User) GetStripeKey() *string {
-	return u.StripeKey
 }
 
 func (u User) GetCreatedAt() time.Time {
@@ -151,7 +151,6 @@ func NewUserFromInt(u coremodels.UserInterface) User {
 		Firstname:  u.GetFirstname(),
 		Lastname:   u.GetLastname(),
 		Role:       u.GetRole(),
-		StripeKey:  u.GetStripeKey(),
 		CreatedAt:  u.GetCreatedAt(),
 		UpdatedAt:  u.GetUpdatedAt(),
 		DeletedAt:  u.GetDeletedAt(),

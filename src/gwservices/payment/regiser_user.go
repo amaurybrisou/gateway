@@ -15,7 +15,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s Service) RegisterUser(ctx context.Context, id, email, name string) (models.User, error) {
+func (s Service) RegisterUser(ctx context.Context, externalID, email, name string) (models.User, error) {
+	user, err := s.db.GetFullUserByEmail(ctx, email)
+	if err != nil {
+		return models.User{}, err
+	}
+
+	if user.ID != uuid.Nil {
+		log.Ctx(ctx).Debug().Any("user", user).Msg("user already exists")
+		return user, nil
+	}
+
 	password, err := cryptlib.GenerateRandomPassword(16)
 	if err != nil {
 		return models.User{}, err
@@ -35,7 +45,7 @@ func (s Service) RegisterUser(ctx context.Context, id, email, name string) (mode
 
 	u := models.User{
 		ID:         uuid.New(),
-		ExternalID: id,
+		ExternalID: externalID,
 		Email:      email,
 		Firstname:  name,
 		Password:   hashedPassword,

@@ -3,10 +3,11 @@ module github.com/amaurybrisou/gateway
 go 1.20
 
 require (
-	github.com/amaurybrisou/ablib v0.0.0-20230710021514-a599fa90bf7b
+	github.com/amaurybrisou/ablib v0.0.0-20230712181533-e258acfb357e
 	github.com/docker/docker v24.0.4+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/go-chi/chi/v5 v5.0.8
+	github.com/go-chi/cors v1.2.1
 	github.com/google/uuid v1.3.0
 	github.com/jackc/pgx/v5 v5.4.1
 	github.com/lib/pq v1.10.9

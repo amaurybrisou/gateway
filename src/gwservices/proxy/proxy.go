@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	coremiddleware "github.com/amaurybrisou/ablib/http/middleware"
+	ablibhttp "github.com/amaurybrisou/ablib/http"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/database/models"
 	"github.com/go-chi/chi/v5/middleware"
@@ -88,7 +88,7 @@ func (p Proxy) ServiceAccessHandler(authMiddleware func(next http.Handler) http.
 
 func (p Proxy) CheckRequiredRoles(service models.Service, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := r.Context().Value(coremiddleware.UserIDCtxKey).(uuid.UUID)
+		userID, ok := r.Context().Value(ablibhttp.UserIDCtxKey).(uuid.UUID)
 		if !ok {
 			log.Ctx(r.Context()).Error().Err(errors.New("invalid user_id")).Send()
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -116,7 +116,7 @@ func (p Proxy) CheckRequiredRoles(service models.Service, next http.Handler) htt
 
 		r.Header.Add("X-Plan-Metadata", string(m))
 
-		user := coremiddleware.User(r.Context())
+		user := ablibhttp.User(r.Context())
 		r.Header.Add("X-Stripe-Customer-ID", user.GetExternalID())
 
 		next.ServeHTTP(w, r)

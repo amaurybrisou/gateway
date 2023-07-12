@@ -1,46 +1,26 @@
 import React from 'react';
-import { Link, Outlet } from 'react-router-dom';
-import { Logout } from '../svc/svc';
+import { Outlet } from 'react-router-dom';
+import NavBar from '../components/navbar';
+import { API_URL } from '../constants';
+import { useUser } from '../context/user';
+
+async function getUser(){
+  const res = await fetch(API_URL+'/auth/user',{
+    credentials: "same-origin"
+  })
+  if (!res.ok){
+    return {}
+  }
+
+  return await res.json()
+}
 
 function Layout(props) {
+  const {user} = useUser()
   // const navigate = useNavigate();
-  const user = props.user
-
   return (
     <div>
-      <nav className="bg-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Link to="/" className="text-white">
-                  Service Gateway
-                </Link>
-              </div>
-            </div>
-            <div className="hidden md:block">
-              <div className="ml-10 flex items-baseline space-x-4">
-                {!user && (
-                  <Link
-                    to="/login"
-                    className="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
-                  >
-                    Login
-                  </Link>
-                )}
-                {user && (
-                  <div className="text-gray-300 px-3 py-2 rounded-md text-sm font-medium grid grid-cols-2 gap-4">
-                    <span>
-                    Welcome, {user.firstname}
-                    </span>
-                    <Link onClick={() => Logout() }>Logout</Link>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <NavBar user={user}/>
       <Outlet />
     </div>
   );
