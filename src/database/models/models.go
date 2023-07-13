@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	coremodels "github.com/amaurybrisou/ablib/models"
+	ablibmodels "github.com/amaurybrisou/ablib/models"
 	"github.com/google/uuid"
 )
 
@@ -83,19 +83,19 @@ func (s Service) HasRole(r Role) bool {
 }
 
 type User struct {
-	ID         uuid.UUID              `json:"id"`
-	ExternalID string                 `json:"external_id"`
-	Email      string                 `json:"email"`
-	AvatarURL  string                 `json:"avatar"`
-	Firstname  string                 `json:"firstname"`
-	Lastname   string                 `json:"lastname"`
-	Password   string                 `json:"-"`
-	Role       coremodels.GatewayRole `json:"role"`
-	StripeKey  *string                `json:"-"`
-	IsNew      string                 `json:"-"`
-	CreatedAt  time.Time              `json:"created_at"`
-	UpdatedAt  *time.Time             `json:"updated_at"`
-	DeletedAt  *time.Time             `json:"deleted_at"`
+	ID         uuid.UUID               `json:"id"`
+	ExternalID string                  `json:"external_id"`
+	Email      string                  `json:"email"`
+	AvatarURL  string                  `json:"avatar"`
+	Firstname  string                  `json:"firstname"`
+	Lastname   string                  `json:"lastname"`
+	Password   string                  `json:"-"`
+	Role       ablibmodels.GatewayRole `json:"role"`
+	StripeKey  *string                 `json:"-"`
+	IsNew      string                  `json:"-"`
+	CreatedAt  time.Time               `json:"created_at"`
+	UpdatedAt  *time.Time              `json:"updated_at"`
+	DeletedAt  *time.Time              `json:"deleted_at"`
 }
 
 func (u User) GetID() uuid.UUID {
@@ -126,7 +126,7 @@ func (u User) GetLastname() string {
 	return u.Lastname
 }
 
-func (u User) GetRole() coremodels.GatewayRole {
+func (u User) GetRole() ablibmodels.GatewayRole {
 	return u.Role
 }
 
@@ -142,7 +142,7 @@ func (u User) GetDeletedAt() *time.Time {
 	return u.DeletedAt
 }
 
-func NewUserFromInt(u coremodels.UserInterface) User {
+func NewUserFromInt(u ablibmodels.UserInterface) User {
 	return User{
 		ID:         u.GetID(),
 		ExternalID: u.GetExternalID(),

@@ -4,8 +4,8 @@ github.com/Microsoft/go-winio v0.6.1 h1:9/kr64B9VUZrLm5YYwbGtUJnMgqWVOdUAXu6Migc
 github.com/Microsoft/go-winio v0.6.1/go.mod h1:LRdKpFKfdobln8UmuiYcKPot9D2v6svN5+sAH+4kjUM=
 github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 h1:TngWCqHvy9oXAN6lEVMRuU21PR1EtLVZJmdB18Gu3Rw=
 github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5/go.mod h1:lmUJ/7eu/Q8D7ML55dXQrVaamCz2vxCfdQBasLZfHKk=
-github.com/amaurybrisou/ablib v0.0.0-20230712181533-e258acfb357e h1:caxHm6BJQ3bIvTWzkGi33XRHERrUqufwRGS3iv4G4Vk=
-github.com/amaurybrisou/ablib v0.0.0-20230712181533-e258acfb357e/go.mod h1:QwiBOWyWpxGOfYP2SlOl7awXi/ewpzTZE/5rMuEv29k=
+github.com/amaurybrisou/ablib v0.0.0-20230713032812-81b2f533d23c h1:lI5odlWCcRNt3qu89qgLNCNfGitrPVDrjL1BGk/Zneo=
+github.com/amaurybrisou/ablib v0.0.0-20230713032812-81b2f533d23c/go.mod h1:QwiBOWyWpxGOfYP2SlOl7awXi/ewpzTZE/5rMuEv29k=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/cenkalti/backoff v2.2.1+incompatible h1:tNowT99t7UNflLxfYYSlKYsBpXdEet03Pg2g16Swow4=

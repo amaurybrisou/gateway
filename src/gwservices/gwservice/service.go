@@ -174,47 +174,6 @@ func (s Service) ServicePricePage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// func (s Service) PostLoginHandler(w http.ResponseWriter, r *http.Request) {
-// 	type Credentials struct {
-// 		Email    string `json:"email"`
-// 		Password string `json:"password"`
-// 	}
-// 	// Parse the request body into a Credentials struct
-// 	var creds Credentials
-// 	err := json.NewDecoder(r.Body).Decode(&creds)
-// 	if err != nil {
-// 		log.Ctx(r.Context()).Error().Err(err).Msg("Invalid request body")
-// 		http.Error(w, "Invalid request body", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	user, err := s.db.GetUserByEmail(r.Context(), creds.Email)
-// 	if err != nil && !errors.Is(err, database.ErrUserNotFound) {
-// 		log.Ctx(r.Context()).Error().Err(err).Msg("internal error")
-// 		http.Error(w, "internal error", http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	if user.ID == uuid.Nil || !cryptlib.ValidateHash(creds.Password, user.Password) {
-// 		log.Ctx(r.Context()).Error().Err(err).Msg("invalid credentials")
-// 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
-// 		return
-// 	}
-
-// 	// Generate a JWT token with a subject and expiration time
-// 	token, err := s.jwt.GenerateToken(user.ID.String(), time.Now().Add(time.Hour), time.Now())
-// 	if err != nil {
-// 		log.Ctx(r.Context()).Error().Err(err).Msg("failed to generate")
-// 		http.Error(w, "failed to generate token", http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	// Return the token as the response
-// 	response := map[string]string{"token": token}
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(response) //nolint
-// }
-
 // PasswordUpdateHandler is an HTTP handler for updating the user password.
 func (s Service) PasswordUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	var request struct {

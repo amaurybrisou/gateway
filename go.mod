@@ -3,7 +3,7 @@ module github.com/amaurybrisou/gateway
 go 1.20
 
 require (
-	github.com/amaurybrisou/ablib v0.0.0-20230712181533-e258acfb357e
+	github.com/amaurybrisou/ablib v0.0.0-20230713032812-81b2f533d23c
 	github.com/docker/docker v24.0.4+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/go-chi/chi/v5 v5.0.8

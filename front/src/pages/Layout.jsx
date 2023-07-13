@@ -16,7 +16,7 @@ function Layout(props) {
                 </Link>
               </div>
             </div>
-            <Consumer className="hidden md:block">
+            <div className="hidden md:block">
               <div className="ml-10 flex items-baseline space-x-4">
                 {!props.user && (
                   <Link
@@ -35,7 +35,7 @@ function Layout(props) {
                   </div>
                 )}
               </div>
-            </Consumer>
+            </div>
           </div>
         </div>
       </nav>

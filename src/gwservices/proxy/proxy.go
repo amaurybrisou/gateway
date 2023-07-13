@@ -11,6 +11,7 @@ import (
 	ablibhttp "github.com/amaurybrisou/ablib/http"
 	"github.com/amaurybrisou/gateway/src/database"
 	"github.com/amaurybrisou/gateway/src/database/models"
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -38,6 +39,27 @@ func New(db *database.Database, cfg Config) Proxy {
 	}
 }
 
+func (s Proxy) PublicRoutes(w http.ResponseWriter, r *http.Request) {
+	pathPrefix := chi.URLParam(r, "service_name")
+	if pathPrefix == "" {
+		http.Error(w, "service not found", http.StatusNotFound)
+		return
+	}
+
+	// pathPrefix := p.extractPathPrefix(r.URL.Path)
+	log.Ctx(r.Context()).Debug().Any("prefix", pathPrefix).Any("url.path", r.URL.Path).Msg("proxy request received")
+
+	// Lookup the backend URL based on the path prefix
+	service, err := s.db.GetServiceByName(r.Context(), pathPrefix)
+	if err != nil {
+		log.Ctx(r.Context()).Warn().Err(err).Msg("backend not found")
+		http.Redirect(w, r, s.notFoundRedirectURL, http.StatusPermanentRedirect)
+		return
+	}
+
+	s.ProxyHandler(service.Host, pathPrefix, w, r).ServeHTTP(w, r)
+}
+
 func (s Proxy) ProxyHandler(host, pathPrefix string, w http.ResponseWriter, r *http.Request) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		targetURL, err := url.Parse(host)
@@ -55,7 +77,7 @@ func (s Proxy) ProxyHandler(host, pathPrefix string, w http.ResponseWriter, r *h
 				req.Header.Add("X-Request-Id", middleware.GetReqID(req.Context()))
 				req.Header.Add("X-Forwarded-For", req.RemoteAddr)
 				req.Host = targetURL.Host
-				log.Ctx(r.Context()).Debug().Any("url", r.URL).Any("host", r.Host).Msg("proxying to")
+				log.Ctx(r.Context()).Debug().Any("path", req.URL.Path).Any("host", req.Host).Msg("proxying to")
 			},
 		}
 
@@ -65,7 +87,15 @@ func (s Proxy) ProxyHandler(host, pathPrefix string, w http.ResponseWriter, r *h
 
 func (p Proxy) ServiceAccessHandler(authMiddleware func(next http.Handler) http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pathPrefix := p.extractPathPrefix(r.URL.Path)
+		pathPrefix := chi.URLParam(r, "service_name")
+		if pathPrefix == "" {
+			http.Error(w, "service not found", http.StatusNotFound)
+			return
+		}
+
+		pathPrefix = "/" + pathPrefix
+
+		// pathPrefix := p.extractPathPrefix(r.URL.Path)
 		log.Ctx(r.Context()).Debug().Any("prefix", pathPrefix).Any("url.path", r.URL.Path).Msg("proxy request received")
 
 		// Lookup the backend URL based on the path prefix
@@ -123,11 +153,11 @@ func (p Proxy) CheckRequiredRoles(service models.Service, next http.Handler) htt
 	})
 }
 
-func (p Proxy) extractPathPrefix(path string) string {
-	path = strings.TrimPrefix(path, p.stripPrefix)
-	parts := strings.Split(path, "/")
-	if len(parts) > 1 {
-		return "/" + parts[1]
-	}
-	return path
-}
+// func (p Proxy) extractPathPrefix(path string) string {
+// 	path = strings.TrimPrefix(path, p.stripPrefix)
+// 	parts := strings.Split(path, "/")
+// 	if len(parts) > 1 {
+// 		return "/" + parts[1]
+// 	}
+// 	return path
+// }

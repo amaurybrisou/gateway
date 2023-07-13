@@ -72,6 +72,7 @@ func Router(s gwservices.Services, db *database.Database) http.Handler {
 	r.Post("/payment/webhook", s.Payment().StripeWebhook)
 	r.Get("/services", s.Service().GetAllServicesHandler)
 	r.Get("/pricing/{service_name}", s.Service().ServicePricePage)
+	r.Get("/details/{service_name}", s.Proxy().PublicRoutes)
 
 	// AUTHENTICATED
 
