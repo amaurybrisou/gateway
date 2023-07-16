@@ -53,12 +53,7 @@ func Router(s gwservices.Services, db *database.Database) http.Handler {
 		ablib.LookupEnv("COOKIE_SCRET", "something-secret"),
 		ablib.LookupEnv("COOKIE_NAME", "cookie-name"),
 		ablib.LookupEnvInt("COOKIE_MAX_AGE", 3600),
-		func(ctx context.Context, email string) (ablibmodels.UserInterface, error) {
-			return db.GetUserByEmail(ctx, email)
-		},
-		func(ctx context.Context, id uuid.UUID) (ablibmodels.UserInterface, error) {
-			return db.GetUserByID(ctx, id)
-		},
+		Repo{db: db},
 		s.Jwt(),
 	)
 
@@ -70,9 +65,9 @@ func Router(s gwservices.Services, db *database.Database) http.Handler {
 	r.Post("/login", authProvider.Login)
 
 	r.Post("/payment/webhook", s.Payment().StripeWebhook)
-	r.Get("/services", s.Service().GetAllServicesHandler)
-	r.Get("/pricing/{service_name}", s.Service().ServicePricePage)
-	r.Get("/details/{service_name}", s.Proxy().PublicRoutes)
+	r.With(authProvider.NonAuthoritativeMiddleware).With(ablibhttp.JsonContentType()).Get("/services", s.Service().GetAllServicesHandler)
+	r.With(authProvider.NonAuthoritativeMiddleware).Get("/pricing/{service_name}", s.Service().ServicePricePage)
+	r.With(authProvider.NonAuthoritativeMiddleware).Get("/details/{service_name}", s.Proxy().PublicRoutes)
 
 	// AUTHENTICATED
 
@@ -83,8 +78,9 @@ func Router(s gwservices.Services, db *database.Database) http.Handler {
 		authenticatedRouter.Post("/update-password", s.Service().PasswordUpdateHandler)
 		authenticatedRouter.Get("/user", s.Service().GetUserHandler)
 		authenticatedRouter.Get("/logout", authProvider.Logout)
+		authenticatedRouter.Get("/refresh-token", authProvider.RefreshToken)
 
-		authenticatedRouter.Get("/services", s.Service().GetAllServicesHandler)
+		// authenticatedRouter.Get("/services", s.Service().GetAllServicesHandler)
 
 		authenticatedRouter.Route("/admin", func(adminRouter chi.Router) {
 			adminRouter.Use(ablibhttp.IsAdminMiddleware)
@@ -114,4 +110,32 @@ func Router(s gwservices.Services, db *database.Database) http.Handler {
 	}
 
 	return r
+}
+
+type Repo struct{ db *database.Database }
+
+func (r Repo) GetUserByEmail(ctx context.Context, email string) (ablibmodels.UserInterface, error) {
+	return r.db.GetUserByEmail(ctx, email)
+}
+
+func (r Repo) GetUserByID(ctx context.Context, userIDString string) (ablibmodels.UserInterface, error) {
+	userID, err := uuid.Parse(userIDString)
+	if err != nil {
+		return nil, err
+	}
+	return r.db.GetUserByID(ctx, userID)
+}
+
+func (r Repo) GetRefreshTokenByUserID(ctx context.Context, userID string) (string, error) {
+	return r.db.GetRefreshTokenByUserID(ctx, userID)
+}
+
+// AddRefreshToken adds a new refresh token for a user ID.
+func (r Repo) AddRefreshToken(ctx context.Context, userID string, refreshToken string) error {
+	return r.db.AddRefreshToken(ctx, userID, refreshToken)
+}
+
+// RemoveRefreshToken removes a refresh token for a user ID.
+func (r Repo) RemoveRefreshToken(ctx context.Context, userID string) error {
+	return r.db.RemoveRefreshToken(ctx, userID)
 }

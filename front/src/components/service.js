@@ -46,10 +46,10 @@ export default function Service({
 
   return (
     <div className="service bg-white shadow-lg rounded-lg overflow-hidden">
-      {(isActive && <a href={`/details/${name}`}>{displayService()}</a>) || displayService()}
+      {(isActive && <a href={`/${has_access ? "" : "details/"}${name}`}>{displayService()}</a>) || displayService()}
       <div className="p-4">
         <p className="text-gray-700">{description}</p>
-        {isActive && !has_access && <a 
+        {isActive && !has_access && !is_free && <a 
           className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 w-full block text-center rounded-md mt-4" 
           href={`/${has_access ? "" : "pricing/"}${name}`}
         >

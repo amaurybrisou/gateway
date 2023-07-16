@@ -122,7 +122,14 @@ func (d *Database) GetFullUserByExternalID(ctx context.Context, externalID strin
 
 func (d Database) GetUserServices(ctx context.Context, userID uuid.UUID) ([]*models.Service, error) {
 	query := `
-	SELECT s.id, s.name, s.description, s.status, s.prefix, s.image_url, s.created_at, required_roles, CASE WHEN ur.user_id IS NOT NULL OR s.required_roles = '{}' THEN true ELSE false END AS has_access
+	SELECT s.id, s.name, s.description, s.status, s.prefix, s.image_url, s.created_at, required_roles, 
+		CASE WHEN 
+			ur.user_id IS NOT NULL AND ((expires_at IS NULL OR expires_at > now()) AND ur.deleted_at IS NULL)
+			OR s.required_roles = '{}' 
+		THEN true
+		ELSE false 
+		END 
+		AS has_access
 	FROM service s
 	LEFT JOIN user_role ur ON ur.user_id = $1 AND ur.role = ANY(s.required_roles) WHERE s.deleted_at IS NULL;
 	`

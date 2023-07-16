@@ -4,17 +4,14 @@ import Service from '../components/service';
 import { ACCESS_TOKEN_KEY, API_URL } from '../constants';
 
 const getServices = async () => {
-  let url ='/services'
-
+  var headers;
   const token = sessionStorage.getItem(ACCESS_TOKEN_KEY);
   if (token) {
-    url = '/auth/services'
-  }
-  const response = await fetch(API_URL + url, {
-    headers: {
+    headers = {
       Authorization: "Bearer " + token,
-    },
-  });
+    }
+  }
+  const response = await fetch(API_URL + '/services', {    headers  });
 
   if (response.ok) {
     const data = await response.json();

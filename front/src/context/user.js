@@ -8,6 +8,7 @@ const Context = createContext();
 const Provider = ({ children }) => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [expiresAt, setExpiresAt] = useState(null);
 
   const getUserProfile = async () => {
     const token = sessionStorage.getItem(ACCESS_TOKEN_KEY);
@@ -28,8 +29,23 @@ const Provider = ({ children }) => {
   };
 
   useEffect(() => {
+    refreshTokenInt();
     getUserProfile();
   }, []);
+
+  useEffect(() => {
+    const token = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+    if (token && expiresAt) {
+      const currentTime = Math.floor(Date.now() / 1000);
+      const timeRemaining = expiresAt - currentTime;
+      const refreshThreshold = 10; // Specify the delta in seconds
+      const timeout = setTimeout(() => {
+        refreshTokenInt();
+      }, (timeRemaining - refreshThreshold) * 1000);
+  
+      return () => clearTimeout(timeout);
+    }
+  }, [expiresAt]);
 
   const login = async (event) => {
     event.preventDefault();
@@ -45,12 +61,38 @@ const Provider = ({ children }) => {
     });
 
     if (!res.ok) {
+      setUser(null);
+      sessionStorage.removeItem(ACCESS_TOKEN_KEY);
       return res.statusText;
     } else {
       const data = await res.json();
       sessionStorage.setItem(ACCESS_TOKEN_KEY, data.token);
+      setExpiresAt(data.expires_at);
       getUserProfile();
       navigate("/");
+    }
+  };
+
+  const refreshTokenInt = async function () {
+    const token = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+    if (token) {
+      const res = await fetch(API_URL + "/auth/refresh-token", {
+        credentials: "same-origin",
+        headers: {
+          Authorization: "Bearer " + token,
+        },
+      });
+
+      if (!res.ok) {
+        setUser(null);
+        sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+        navigate("/");
+        return;
+      }
+
+      const data = await res.json();
+      sessionStorage.setItem(ACCESS_TOKEN_KEY, data.token);
+      setExpiresAt(data.expires_at);
     }
   };
 
