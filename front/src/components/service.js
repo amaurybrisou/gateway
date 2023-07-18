@@ -1,11 +1,11 @@
-export default function Service({
+export default function Service({ service : {
   name,
   description,
-  image,
+  image_url,
   has_access,
   status,
   is_free,
-}) {
+}}) {
   const getStatusColor = () => {
     if (status === "OK") {
       return "bg-green-300";
@@ -32,7 +32,7 @@ export default function Service({
   const displayService = () => {
     return (
       <div className="relative">
-        <img className="w-full h-auto object-cover" src={image} alt={name} />
+        <img className="w-full h-auto object-cover" src={image_url} alt={name} />
         <div className="absolute top-0 left-0 p-4">
           <h2 className="text-gray-800 text-xl font-bold capitalize">{name}</h2>
         </div>

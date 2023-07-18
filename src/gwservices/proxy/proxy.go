@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -57,15 +58,21 @@ func (s Proxy) PublicRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.ProxyHandler(service.Host, pathPrefix, w, r).ServeHTTP(w, r)
+	s.ProxyHandler(service, w, r).ServeHTTP(w, r)
 }
 
-func (s Proxy) ProxyHandler(host, pathPrefix string, w http.ResponseWriter, r *http.Request) http.Handler {
+func (s Proxy) ProxyHandler(service models.Service, w http.ResponseWriter, r *http.Request) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		targetURL, err := url.Parse(host)
+		targetURL, err := url.Parse(service.Host)
 		if err != nil {
 			log.Ctx(r.Context()).Error().Err(err).Msg("Failed to parse backend URL")
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		log.Ctx(r.Context()).Debug().Any("domain", service.Domain).Any("host", r.Host).Send()
+		if service.Domain != r.Host && service.Domain != "" {
+			http.Redirect(w, r, fmt.Sprintf("https://%s%s", service.Domain, strings.TrimPrefix(r.URL.Path, service.Prefix)), http.StatusPermanentRedirect)
 			return
 		}
 
@@ -73,7 +80,7 @@ func (s Proxy) ProxyHandler(host, pathPrefix string, w http.ResponseWriter, r *h
 			Director: func(req *http.Request) {
 				req.URL.Scheme = targetURL.Scheme
 				req.URL.Host = targetURL.Host
-				req.URL.Path = strings.TrimPrefix(req.URL.Path, pathPrefix)
+				req.URL.Path = strings.TrimPrefix(req.URL.Path, service.Prefix)
 				req.Header.Add("X-Request-Id", middleware.GetReqID(req.Context()))
 				req.Header.Add("X-Forwarded-For", req.RemoteAddr)
 				req.Host = targetURL.Host
@@ -87,17 +94,12 @@ func (s Proxy) ProxyHandler(host, pathPrefix string, w http.ResponseWriter, r *h
 
 func (p Proxy) ServiceAccessHandler(authMiddleware func(next http.Handler) http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pathPrefix := chi.URLParam(r, "service_name")
-		if pathPrefix == "" {
-			http.Error(w, "service not found", http.StatusNotFound)
-			return
-		}
+		pathPrefix := "/" + chi.URLParam(r, "service_name")
 
-		pathPrefix = "/" + pathPrefix
-
-		// pathPrefix := p.extractPathPrefix(r.URL.Path)
-		log.Ctx(r.Context()).Debug().Any("prefix", pathPrefix).Any("url.path", r.URL.Path).Msg("proxy request received")
-
+		log.Ctx(r.Context()).Debug().
+			Any("host", r.Host).
+			Any("prefix", pathPrefix).
+			Any("url.path", r.URL.Path).Msg("proxy request received")
 		// Lookup the backend URL based on the path prefix
 		service, err := p.db.GetServiceByPrefixOrDomain(r.Context(), pathPrefix, r.Host)
 		if err != nil {
@@ -108,10 +110,10 @@ func (p Proxy) ServiceAccessHandler(authMiddleware func(next http.Handler) http.
 
 		if len(service.RequiredRoles) > 0 {
 			// Service requires authentication, perform JWT authentication
-			authMiddleware(p.CheckRequiredRoles(service, p.ProxyHandler(service.Host, pathPrefix, w, r))).ServeHTTP(w, r)
+			authMiddleware(p.CheckRequiredRoles(service, p.ProxyHandler(service, w, r))).ServeHTTP(w, r)
 		} else {
 			// Service does not require authentication, continue to the next handler
-			p.ProxyHandler(service.Host, pathPrefix, w, r).ServeHTTP(w, r)
+			p.ProxyHandler(service, w, r).ServeHTTP(w, r)
 		}
 	}
 }

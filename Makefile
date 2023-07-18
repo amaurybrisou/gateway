@@ -110,3 +110,10 @@ tools: ${GOBIN}/go-callvis
 .PHONY: callvis
 callvis: tools
 	${GOBIN}/go-callvis cmd/gateway/main.go
+
+${GOBIN}/govulncheck:
+	GOBIN=${GOBIN} go install golang.org/x/vuln/cmd/govulncheck@latest
+
+.PHONY: check
+check: tools
+	$(GOBIN)/govulncheck ./...

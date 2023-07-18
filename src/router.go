@@ -27,6 +27,14 @@ func Router(s gwservices.Services, db *database.Database) http.Handler {
 		r.Use(cors.AllowAll().Handler)
 	}
 
+	if ablib.LookupEnv("ENV", "dev") == "prod" {
+		r.Use(cors.New(cors.Options{
+			AllowedOrigins: []string{
+				ablib.LookupEnv("ALLOWED_ORIGINS", "https://*.puzzledge.org"),
+			},
+		}).Handler)
+	}
+
 	r.Use(middleware.RealIP)
 	r.Use(middleware.RequestID)
 	r.Use(ablibhttp.LoggerMiddleware(&log.Logger))
@@ -52,13 +60,21 @@ func Router(s gwservices.Services, db *database.Database) http.Handler {
 	authProvider := ablibhttp.NewCookieAuthHandler(
 		ablib.LookupEnv("COOKIE_SCRET", "something-secret"),
 		ablib.LookupEnv("COOKIE_NAME", "cookie-name"),
+		ablib.LookupEnv("COOKIE_DOMAIN", "cookie-domain"),
 		ablib.LookupEnvInt("COOKIE_MAX_AGE", 3600),
 		Repo{db: db},
 		s.Jwt(),
 	)
 
 	// UNAUTHENTICATED
-	r.Handle("/", http.RedirectHandler("/home", http.StatusPermanentRedirect))
+	r.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != ablib.LookupEnv("DOMAIN", "localhost:8089") {
+			s.Proxy().ServiceAccessHandler(authProvider.Middleware).ServeHTTP(w, r)
+			return
+		}
+		http.RedirectHandler("/home", http.StatusPermanentRedirect).ServeHTTP(w, r)
+	}))
+
 	r.Route("/home", func(r chi.Router) {
 		r.Handle("/*", http.StripPrefix("/home", http.FileServer(http.Dir(ablib.LookupEnv("FRONT_BUILD_PATH", "front/dist")))))
 	})

@@ -38,12 +38,7 @@ export default function Home() {
               services.map((s) => (
                 <Service
                   key={s.id}
-                  name={s.name}
-                  description={s.description}
-                  image={s.image_url}
-                  has_access={s.has_access}
-                  status={s.status}
-                  is_free={s.is_free}
+                  service={s}
                 />
               ))}
           </div>
