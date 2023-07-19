@@ -42,6 +42,15 @@ jobs:
           # hotfix is to skip the pkg cache, which also requires an extended timeout:
           skip-pkg-cache: true
 
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v4
+        with:
+          go-version: "${{ env.GO_VERSION }}"
+      - run: make check
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -61,7 +70,7 @@ jobs:
       - run: make test
 
   deploy:
-    needs: [tidy, lint, build, test]
+    needs: [tidy, lint, govulncheck, build, test]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/dev'
     steps:

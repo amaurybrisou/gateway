@@ -40,6 +40,7 @@ func main() {
 	}()
 
 	log.Ctx(ctx).Info().
+		Any("env", ablib.LookupEnv("ENV", "dev")).
 		Any("build_version", src.BuildVersion).
 		Any("build_hash", src.BuildHash).
 		Any("build_time", src.BuildTime).
@@ -62,6 +63,10 @@ func main() {
 		ctx,
 		mailcli.WithMailClientOptionSenderEmail(ablib.LookupEnv("SENDER_EMAIL", "gateway@gateway.org")),
 		mailcli.WithMailClientOptionSenderPassword(ablib.LookupEnv("SENDER_PASSWORD", "default-password")),
+		mailcli.WithClientOptionSMTPServer(
+			ablib.LookupEnv("SMTP_SERVER", "smtp.gmail.com"),
+			ablib.LookupEnvInt("SMTP_PORT", 587),
+		),
 	)
 	if err != nil {
 		log.Ctx(ctx).Fatal().Err(err).Msg("creating mail client")

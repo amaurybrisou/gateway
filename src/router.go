@@ -76,7 +76,7 @@ func Router(s gwservices.Services, db *database.Database) http.Handler {
 	}))
 
 	r.Route("/home", func(r chi.Router) {
-		r.Handle("/*", http.StripPrefix("/home", http.FileServer(http.Dir(ablib.LookupEnv("FRONT_BUILD_PATH", "front/dist")))))
+		r.Handle("/*", http.StripPrefix("/home", http.FileServer(http.Dir(ablib.LookupEnv("FRONT_BUILD_PATH", "front/build")))))
 	})
 	r.Post("/login", authProvider.Login)
 
